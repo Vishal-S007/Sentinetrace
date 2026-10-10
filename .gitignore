@@ -11,3 +11,7 @@ coverage/
 playwright-report/
 test-results/
 uploads/
+.pgdata/
+storage/
+.env.devdb
+.ruff_cache/

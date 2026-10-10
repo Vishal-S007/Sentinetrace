@@ -1,0 +1,30 @@
+@import 'tailwindcss';
+
+/* SentinelTrace SOC theme: dark, restrained, one accent. */
+@theme {
+  --color-base: #0b0f14;
+  --color-panel: #111821;
+  --color-panel-2: #16202b;
+  --color-line: #233040;
+  --color-ink: #e6edf3;
+  --color-ink-dim: #8b9bab;
+  --color-accent: #3fb6a8;
+  --color-ok: #3fb950;
+  --color-warn: #d29922;
+  --color-crit: #f85149;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-base);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}

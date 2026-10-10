@@ -2,7 +2,7 @@
 
 A log analysis and threat detection platform. It ingests web-server and authentication logs, normalizes them, runs deterministic detection rules, and presents evidence-backed alerts for investigation.
 
-> **Status:** Phase 1 (scaffold) complete. See [Development progress](#development-progress). This is a local MVP under active development, not a production security product.
+> **Status:** Phase 1 (scaffold) complete, CI green. See [Development progress](#development-progress). This is a local MVP under active development, not a production security product.
 
 **Stack:** FastAPI · SQLAlchemy · Alembic · PostgreSQL 16 · React 19 · TypeScript · Vite · Tailwind CSS · Recharts · Pytest · Vitest · Playwright · Docker Compose
 

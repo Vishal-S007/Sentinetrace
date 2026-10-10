@@ -1,6 +1,6 @@
 # Phase 1 Report: Scaffold
 
-Date: 2026-10-10 · Result: **Gate passed for everything runnable locally.** The CI-only items are listed below.
+Date: 2026-10-10 · Result: **Gate passed. All checks verified, including in GitHub Actions.**
 
 ## What was built
 
@@ -61,15 +61,18 @@ Date: 2026-10-10 · Result: **Gate passed for everything runnable locally.** The
 - a 500 shows the server message
 - Re-check recovers from an error and issues new requests
 
-## Not verified locally (will run in GitHub Actions)
+## Verified in GitHub Actions (CI run #1, commit 6c73c94)
 
-| Item | Reason | Where it will be verified |
+The local development environment had no access to browser downloads or Docker Hub, so these ran in CI instead:
+
+| Job | Result | Duration |
 |---|---|---|
-| Playwright E2E (`e2e/status.spec.ts`) | Browser download host is unavailable locally | CI `e2e` job |
-| `docker compose up --build` | Docker Hub image pulls are unavailable locally | CI `compose` job |
-| Docker image builds | Same | CI `compose` job |
+| backend (ruff + pytest on PostgreSQL 16 service) | ✅ success | 25s |
+| frontend (lint, Vitest 5/5, build) | ✅ success | 14s |
+| e2e (Playwright, Chromium, live backend) | ✅ success | 1m 19s |
+| compose (`docker compose up --build`, health through nginx) | ✅ success | 57s |
 
-These will be reported as passing only after the CI run shows green.
+Overall run status: **Success** (1m 49s).
 
 ## Outstanding issues
 

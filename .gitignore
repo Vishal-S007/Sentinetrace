@@ -1,0 +1,13 @@
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+.env
+*.env.local
+dist/
+build/
+.pytest_cache/
+coverage/
+playwright-report/
+test-results/
+uploads/

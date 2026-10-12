@@ -14,6 +14,8 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 COPY app ./app
+COPY alembic ./alembic
+COPY alembic.ini docker-entrypoint.sh ./
 RUN uv sync --frozen --no-dev
 
 # Run as an unprivileged user.
@@ -25,4 +27,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=15s --timeout=3s --retries=5 \
   CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health').status==200 else 1)"
 
-CMD ["/app/.venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+ENV PATH="/app/.venv/bin:$PATH"
+# Runs "alembic upgrade head", then uvicorn.
+CMD ["/app/docker-entrypoint.sh"]

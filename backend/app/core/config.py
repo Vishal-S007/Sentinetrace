@@ -28,6 +28,17 @@ class Settings(BaseSettings):
     # Upload limits (enforced from Phase 3 onward).
     max_upload_bytes: int = Field(default=50 * 1024 * 1024, gt=0)
 
+    # Sessions
+    session_idle_minutes: int = Field(default=60, gt=0)
+    session_absolute_hours: int = Field(default=12, gt=0)
+    # None = secure cookies only in production. Set true when serving over HTTPS.
+    cookie_secure: bool | None = None
+
+    # Login rate limiting (failed attempts inside the sliding window)
+    login_window_seconds: int = Field(default=900, gt=0)
+    login_max_failures_per_user: int = Field(default=5, gt=0)
+    login_max_failures_per_ip: int = Field(default=20, gt=0)
+
     @field_validator("database_url")
     @classmethod
     def require_psycopg_driver(cls, v: PostgresDsn) -> PostgresDsn:
@@ -42,6 +53,10 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.environment == "production"
+
+    @property
+    def secure_cookies(self) -> bool:
+        return self.is_production if self.cookie_secure is None else self.cookie_secure
 
 
 @lru_cache

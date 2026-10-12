@@ -1,6 +1,8 @@
 # SentinelTrace local stack. Copy .env.example to .env and set ST_PG_PASSWORD first.
 #   docker compose up --build
 # App: http://localhost:8080   API docs: http://localhost:8080/api/docs
+# First run: create an admin account:
+#   docker compose exec backend python -m app.cli create-admin --username admin
 name: sentineltrace
 
 services:
@@ -26,6 +28,11 @@ services:
       ST_ENVIRONMENT: ${ST_ENVIRONMENT:-development}
       ST_DATABASE_URL: postgresql+psycopg://sentineltrace:${ST_PG_PASSWORD}@db:5432/sentineltrace
       ST_MAX_UPLOAD_BYTES: ${ST_MAX_UPLOAD_BYTES:-52428800}
+      # Set to true when the app is served over HTTPS (required in production).
+      ST_COOKIE_SECURE: ${ST_COOKIE_SECURE:-false}
+      # The backend is reachable only from the nginx container on the internal network,
+      # so it trusts X-Forwarded-For from it (needed for per-IP login rate limiting).
+      FORWARDED_ALLOW_IPS: "*"
     volumes:
       - storage:/app/storage
     depends_on:

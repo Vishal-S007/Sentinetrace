@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api.routes import health
+from app.api.routes import audit, auth, health, users
 from app.core.config import Settings, get_settings
 
 logger = logging.getLogger("sentineltrace")
@@ -80,6 +80,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     app.include_router(health.router, prefix="/api")
+    app.include_router(auth.router, prefix="/api")
+    app.include_router(users.router, prefix="/api")
+    app.include_router(audit.router, prefix="/api")
     return app
 
 

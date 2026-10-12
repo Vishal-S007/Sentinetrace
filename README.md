@@ -2,7 +2,7 @@
 
 A log analysis and threat detection platform. It ingests web-server and authentication logs, normalizes them, runs deterministic detection rules, and presents evidence-backed alerts for investigation.
 
-> **Status:** Phase 1 (scaffold) complete, CI green. See [Development progress](#development-progress). This is a local MVP under active development, not a production security product.
+> **Status:** Phase 2 (authentication, roles, audit) complete. See [Development progress](#development-progress). This is a local MVP under active development, not a production security product.
 
 **Stack:** FastAPI · SQLAlchemy · Alembic · PostgreSQL 16 · React 19 · TypeScript · Vite · Tailwind CSS · Recharts · Pytest · Vitest · Playwright · Docker Compose
 
@@ -17,7 +17,13 @@ python3 -c "import secrets; print(secrets.token_urlsafe(24))"
 docker compose up --build
 ```
 
-- App: <http://localhost:8080>
+Database migrations run automatically when the backend starts. Create the first admin account:
+
+```bash
+docker compose exec backend python -m app.cli create-admin --username admin
+```
+
+- App: <http://localhost:8080> (sign in with the admin account)
 - API docs (OpenAPI): <http://localhost:8080/api/docs>
 
 ## Local development (without Docker)
@@ -35,6 +41,8 @@ cat > .env <<EOF
 ST_DATABASE_URL=postgresql+psycopg://sentineltrace:${ST_PG_PASSWORD}@127.0.0.1:5432/sentineltrace
 EOF
 uv sync
+uv run alembic upgrade head            # create/upgrade the schema
+uv run python -m app.cli create-admin --username admin   # first time only; prompts for a password
 uv run uvicorn app.main:app --reload --port 8000
 
 # 3. Frontend (separate terminal). The Vite dev server proxies /api to :8000.
@@ -56,10 +64,12 @@ uv run ruff check . && uv run ruff format --check .
 cd frontend
 npm test && npm run lint && npm run build
 
-# End-to-end (needs the backend running on :8000 and Playwright's Chromium)
-npx playwright install chromium
-npm run test:e2e
+# End-to-end (needs the backend running on :8000 with an admin account)
+npx playwright install chromium        # or set PW_CHROMIUM_PATH to an existing Chromium
+E2E_ADMIN_USER=admin E2E_ADMIN_PASSWORD='...' npm run test:e2e
 ```
+
+The backend test suite **drops and rebuilds the schema** of the database in `ST_DATABASE_URL`, so it refuses to run unless the database name contains `test`.
 
 CI (`.github/workflows/ci.yml`) runs four jobs on every push:
 - backend tests
@@ -70,11 +80,25 @@ CI (`.github/workflows/ci.yml`) runs four jobs on every push:
 ## Project layout
 
 ```
-backend/    FastAPI app (app/), tests, Alembic migrations (Phase 2+)
+backend/    FastAPI app (app/), tests/, Alembic migrations (alembic/), CLI (app/cli.py)
 frontend/   React + Vite SPA, Vitest tests (src/**/*.test.tsx), Playwright specs (e2e/)
 scripts/    dev-postgres.sh: Docker-free local database
 docs/       spec, plan, per-phase reports
 ```
+
+## Authentication and roles
+
+| Role | Can do |
+|---|---|
+| **viewer** | Read dashboards, events, alerts, rules, incidents and reports |
+| **analyst** | Everything a viewer can, plus triage alerts, manage incidents, import logs and export reports |
+| **admin** | Everything, plus manage users, detection rules and settings, and read the audit log |
+
+- **Sessions:** server-side, held in an `HttpOnly` cookie. Only a SHA-256 hash of the token is stored. Logout, password changes, role changes and deactivation revoke sessions immediately. Sessions expire after 60 idle minutes or 12 hours, both configurable.
+- **CSRF:** every state-changing request needs an `X-CSRF-Token` header. It must match both the `st_csrf` cookie and the token bound to the session.
+- **Passwords:** hashed with Argon2id, minimum 12 characters.
+- **Login rate limiting:** 5 failed attempts per username or 20 per IP within 15 minutes returns `429` with `Retry-After`.
+- **Audit log:** append-only. A database trigger rejects `UPDATE`, `DELETE` and `TRUNCATE` on `audit_log`, and the API has no endpoint that writes or deletes entries.
 
 ## Security notes
 
@@ -91,6 +115,9 @@ docs/       spec, plan, per-phase reports
 | `/api/ready` returns 503 | PostgreSQL isn't reachable. Run `scripts/dev-postgres.sh status`, check the URL and password |
 | `ST_DATABASE_URL must use the postgresql+psycopg:// scheme` | Use the `postgresql+psycopg://` prefix, not `postgres://` |
 | Status page says "API unreachable" | The backend isn't running on :8000, or `ST_API_URL` points elsewhere |
+| Login always returns 429 | Too many failed attempts. Wait 15 minutes (`ST_LOGIN_WINDOW_SECONDS`), or clear `login_attempts` in a dev database |
+| Logged out immediately after signing in over plain HTTP | `ST_COOKIE_SECURE=true` (or `ST_ENVIRONMENT=production`) needs HTTPS. Unset it for local HTTP |
+| `Roles missing. Run 'alembic upgrade head' first.` | Run migrations before `create-admin` |
 | `dev-postgres.sh`: binaries not found | Install PostgreSQL 16 (e.g. `brew install postgresql@16` or `apt install postgresql-16`) |
 
 ## Development progress
@@ -99,8 +126,8 @@ docs/       spec, plan, per-phase reports
 |---|---|---|
 | 0 | Environment inspection and plan ([report](docs/PHASE0_PLAN.md)) | ✅ |
 | 1 | Scaffold, health checks, Compose, CI ([report](docs/reports/phase-1.md)) | ✅ |
-| 2 | Auth, models, migrations, RBAC | ⏳ next |
-| 3 | Parsers, ingestion, normalization | |
+| 2 | Auth, models, migrations, RBAC, audit ([report](docs/reports/phase-2.md)) | ✅ |
+| 3 | Parsers, ingestion, normalization | ⏳ next |
 | 4 | Detection engine, alert grouping | |
 | 5 | Dashboard, event explorer, alert UI | |
 | 6 | Incidents, rules UI, audit, exports | |

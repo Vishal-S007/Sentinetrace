@@ -78,6 +78,8 @@ jobs:
           --health-timeout 3s --health-retries 10
     env:
       ST_DATABASE_URL: postgresql+psycopg://sentineltrace:ci-only-not-a-secret@127.0.0.1:5432/sentineltrace
+      E2E_ADMIN_USER: ci-admin
+      E2E_ADMIN_PASSWORD: ci-only-admin-password
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v7
@@ -88,10 +90,14 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - name: Start backend
+      - name: Migrate, seed admin, start backend
         working-directory: backend
+        env:
+          ST_ADMIN_PASSWORD: ${{ env.E2E_ADMIN_PASSWORD }}
         run: |
           uv sync --frozen --no-dev
+          uv run --no-dev alembic upgrade head
+          uv run --no-dev python -m app.cli create-admin --username "$E2E_ADMIN_USER"
           nohup uv run --no-dev uvicorn app.main:app --host 127.0.0.1 --port 8000 > ../backend.log 2>&1 &
           for i in $(seq 1 30); do curl -fs http://127.0.0.1:8000/api/ready && break; sleep 1; done
           curl -fs http://127.0.0.1:8000/api/ready
@@ -126,6 +132,16 @@ jobs:
           curl -fsS http://127.0.0.1:8080/api/health
           curl -fsS http://127.0.0.1:8080/api/ready
           curl -fsS http://127.0.0.1:8080/ | grep -q "<title>SentinelTrace</title>"
+      - name: Migrations applied; create admin and log in through nginx
+        run: |
+          docker compose exec -T -e ST_ADMIN_PASSWORD=ci-only-admin-password backend \
+            python -m app.cli create-admin --username ci-admin
+          code=$(curl -s -o /dev/null -w '%{http_code}' -c jar.txt -H 'Content-Type: application/json' \
+            -d '{"username":"ci-admin","password":"ci-only-admin-password"}' \
+            http://127.0.0.1:8080/api/auth/login)
+          test "$code" = 200
+          curl -fsS -b jar.txt http://127.0.0.1:8080/api/auth/me | grep -q '"role":"admin"'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/users)" = 401
       - if: always()
         run: docker compose logs --no-color | tail -200
       - if: always()

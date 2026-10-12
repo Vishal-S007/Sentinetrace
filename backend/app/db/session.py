@@ -21,7 +21,9 @@ def get_engine() -> Engine:
         pool_pre_ping=True,
         pool_size=5,
         max_overflow=10,
-        connect_args={"connect_timeout": 3},
+        # All timestamps are timestamptz; pin the session time zone so behaviour is identical
+        # regardless of the server default.
+        connect_args={"connect_timeout": 3, "options": "-c timezone=UTC"},
     )
 
 

@@ -39,6 +39,22 @@ services:
       db:
         condition: service_healthy
 
+  # Processes queued ingestion jobs (parsing + persisting events). Scale with --scale worker=N.
+  worker:
+    build: ./backend
+    command: ["python", "-m", "app.worker"]
+    environment:
+      ST_ENVIRONMENT: ${ST_ENVIRONMENT:-development}
+      ST_DATABASE_URL: postgresql+psycopg://sentineltrace:${ST_PG_PASSWORD}@db:5432/sentineltrace
+    volumes:
+      - storage:/app/storage
+    depends_on:
+      backend:
+        condition: service_healthy  # migrations have run
+    healthcheck:
+      disable: true
+    restart: unless-stopped
+
   frontend:
     build: ./frontend
     ports:

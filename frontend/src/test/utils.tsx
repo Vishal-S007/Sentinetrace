@@ -32,7 +32,7 @@ export function mockApi(routes: Record<string, Handler>) {
       method,
       url,
       headers: (init?.headers as Record<string, string>) ?? {},
-      body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      body: typeof init?.body === 'string' ? JSON.parse(init.body) : init?.body,
     }
     calls.push(call)
     const key = `${method} ${url.split('?')[0]}`

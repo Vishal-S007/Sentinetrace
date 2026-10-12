@@ -1,0 +1,9 @@
+Oct 10 10:15:32 web01 sshd[1234]: Failed password for invalid user admin from 203.0.113.5 port 52144 ssh2
+Oct 10 10:15:35 web01 sshd[1234]: Failed password for root from 203.0.113.5 port 52150 ssh2
+Oct 10 10:16:01 web01 sshd[1240]: Accepted publickey for deploy from 10.0.0.5 port 2222 ssh2: ED25519 SHA256:abc
+Oct 10 10:16:20 web01 sshd[1250]: Invalid user oracle from 203.0.113.9 port 40000
+Oct 10 10:17:00 web01 sudo:    alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Oct 10 10:17:30 web01 sshd[1260]: pam_unix(sshd:auth): authentication failure; logname= uid=0 euid=0 tty=ssh ruser= rhost=203.0.113.5  user=root
+Oct 10 10:18:00 web01 CRON[2000]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+garbage line without syslog header
+2026-10-10T10:19:00.123456+05:30 web01 sshd[1270]: Failed password for bob from 198.51.100.7 port 51000 ssh2

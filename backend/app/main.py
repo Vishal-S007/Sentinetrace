@@ -9,8 +9,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api.routes import audit, auth, health, users
+from app.api.routes import audit, auth, health, jobs, sources, users
 from app.core.config import Settings, get_settings
+from app.core.limits import BodySizeLimitMiddleware
 
 logger = logging.getLogger("sentineltrace")
 
@@ -44,6 +45,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE"],
             allow_headers=["Content-Type", "X-CSRF-Token"],
         )
+
+    app.add_middleware(BodySizeLimitMiddleware, max_upload_bytes=settings.max_upload_bytes)
 
     @app.middleware("http")
     async def add_request_id_and_headers(request: Request, call_next):
@@ -83,6 +86,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(auth.router, prefix="/api")
     app.include_router(users.router, prefix="/api")
     app.include_router(audit.router, prefix="/api")
+    app.include_router(sources.router, prefix="/api")
+    app.include_router(jobs.router, prefix="/api")
     return app
 
 

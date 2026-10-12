@@ -1,0 +1,9 @@
+{"timestamp":"2026-10-10T09:00:00Z","event":"login_failed","user":"alice","src_ip":"198.51.100.20","message":"bad password"}
+{"@timestamp":"2026-10-10T09:00:05.250+02:00","event":{"action":"user_login","outcome":"success"},"source":{"ip":"198.51.100.20"},"user":{"name":"alice"},"log":{"level":"INFO"}}
+{"ts":1791622800000,"level":"error","msg":"payment service timeout","service":"billing","retry":3}
+{"time":"2026-10-10 09:00:10","method":"get","path":"/api/orders?limit=10","status":200,"client_ip":"192.0.2.77","bytes":512}
+{"timestamp":"2026-10-10T09:00:11Z","event":"login","outcome":"failure","username":"root","ip":"not-an-ip"}
+{"event":"login_failed","user":"bob"}
+{"timestamp":"2026-10-10T09:00:12Z", "broken json
+["not", "an", "object"]
+{"timestamp":"2026-10-10T09:00:13Z","status":"ok","msg":"heartbeat"}

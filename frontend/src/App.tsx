@@ -6,12 +6,17 @@ import { useAuth } from './auth/AuthContext'
 import { RequireAuth, RequirePermission } from './auth/guards'
 import { AccountPage } from './pages/AccountPage'
 import { AuditPage } from './pages/AuditPage'
+import { JobDetailPage } from './pages/JobDetailPage'
+import { JobsPage } from './pages/JobsPage'
 import { LoginPage } from './pages/LoginPage'
+import { SourcesPage } from './pages/SourcesPage'
 import { StatusPage } from './pages/StatusPage'
 import { UsersPage } from './pages/UsersPage'
 
 // Only screens that are implemented appear here; each later phase adds its own.
 const NAV: { to: string; label: string; permission?: string }[] = [
+  { to: '/sources', label: 'Log sources', permission: 'events:read' },
+  { to: '/jobs', label: 'Ingestion jobs', permission: 'events:read' },
   { to: '/status', label: 'System status' },
   { to: '/admin/users', label: 'Users & roles', permission: 'users:manage' },
   { to: '/admin/audit', label: 'Audit log', permission: 'audit:read' },
@@ -77,7 +82,31 @@ function Shell() {
       </aside>
       <main className="flex-1 overflow-y-auto p-4 md:p-8">
         <Routes>
-          <Route path="/" element={<Navigate to="/status" replace />} />
+          <Route path="/" element={<Navigate to={can('events:read') ? '/sources' : '/status'} replace />} />
+          <Route
+            path="/sources"
+            element={
+              <RequirePermission permission="events:read">
+                <SourcesPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/jobs"
+            element={
+              <RequirePermission permission="events:read">
+                <JobsPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/jobs/:id"
+            element={
+              <RequirePermission permission="events:read">
+                <JobDetailPage />
+              </RequirePermission>
+            }
+          />
           <Route path="/status" element={<StatusPage />} />
           <Route path="/account" element={<AccountPage />} />
           <Route

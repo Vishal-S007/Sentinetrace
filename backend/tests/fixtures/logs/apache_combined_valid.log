@@ -1,0 +1,6 @@
+198.51.100.10 - - [10/Oct/2026:13:55:36 +0000] "GET /index.html HTTP/1.1" 200 2326 "https://example.com/" "Mozilla/5.0 (X11; Linux x86_64)"
+198.51.100.10 - - [10/Oct/2026:13:55:37 +0000] "GET /static/app.js HTTP/1.1" 200 10240 "https://example.com/index.html" "Mozilla/5.0 (X11; Linux x86_64)"
+203.0.113.66 - - [10/Oct/2026:19:25:38 +0530] "GET /products?id=1%27%20OR%20%271%27=%271 HTTP/1.1" 500 512 "-" "sqlmap/1.7.2#stable (https://sqlmap.org)"
+2001:db8::42 - alice [10/Oct/2026:13:55:39 +0000] "POST /login HTTP/2.0" 302 0 "-" "curl/8.5.0"
+203.0.113.66 - - [10/Oct/2026:13:55:40 +0000] "\x16\x03\x01\x00\xfa\x01" 400 226 "-" "-"
+203.0.113.66 - - [10/Oct/2026:13:55:41 +0000] "GET /search?q=\"<script>alert(1)</script>\" HTTP/1.1" 200 88 "-" "Mozilla/5.0"

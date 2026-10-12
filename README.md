@@ -2,7 +2,7 @@
 
 A log analysis and threat detection platform. It ingests web-server and authentication logs, normalizes them, runs deterministic detection rules, and presents evidence-backed alerts for investigation.
 
-> **Status:** Phase 2 (authentication, roles, audit) complete. See [Development progress](#development-progress). This is a local MVP under active development, not a production security product.
+> **Status:** Phase 3 (log ingestion and parsing) complete. See [Development progress](#development-progress). This is a local MVP under active development, not a production security product.
 
 **Stack:** FastAPI · SQLAlchemy · Alembic · PostgreSQL 16 · React 19 · TypeScript · Vite · Tailwind CSS · Recharts · Pytest · Vitest · Playwright · Docker Compose
 
@@ -45,7 +45,10 @@ uv run alembic upgrade head            # create/upgrade the schema
 uv run python -m app.cli create-admin --username admin   # first time only; prompts for a password
 uv run uvicorn app.main:app --reload --port 8000
 
-# 3. Frontend (separate terminal). The Vite dev server proxies /api to :8000.
+# 3. Ingestion worker (separate terminal): processes uploaded log files
+cd backend && uv run python -m app.worker
+
+# 4. Frontend (separate terminal). The Vite dev server proxies /api to :8000.
 cd frontend
 npm install
 npm run dev                            # http://localhost:5173
@@ -80,11 +83,26 @@ CI (`.github/workflows/ci.yml`) runs four jobs on every push:
 ## Project layout
 
 ```
-backend/    FastAPI app (app/), tests/, Alembic migrations (alembic/), CLI (app/cli.py)
+backend/    FastAPI app (app/), parsers (app/ingestion/), worker (app/worker.py), tests/, Alembic migrations (alembic/), CLI (app/cli.py)
 frontend/   React + Vite SPA, Vitest tests (src/**/*.test.tsx), Playwright specs (e2e/)
 scripts/    dev-postgres.sh: Docker-free local database
 docs/       spec, plan, per-phase reports
 ```
+
+## Importing logs
+
+1. **Log sources** → add a source. Choose its format, or *Auto-detect*. Set its time zone, which is used for timestamps without an offset.
+2. Upload a file to the source. Supported formats:
+   - Apache combined
+   - Nginx combined, common or custom `log_format`
+   - JSON lines
+   - Linux `auth.log`
+3. **Ingestion jobs** shows live progress. Each job reports:
+   - parsed, rejected and duplicate counts
+   - every rejected line with its line number and reason, downloadable as CSV
+   - a Retry button when the job failed
+
+Details of each format, field mapping, limits and duplicate handling: [docs/log-formats.md](docs/log-formats.md).
 
 ## Authentication and roles
 
@@ -115,6 +133,10 @@ docs/       spec, plan, per-phase reports
 | `/api/ready` returns 503 | PostgreSQL isn't reachable. Run `scripts/dev-postgres.sh status`, check the URL and password |
 | `ST_DATABASE_URL must use the postgresql+psycopg:// scheme` | Use the `postgresql+psycopg://` prefix, not `postgres://` |
 | Status page says "API unreachable" | The backend isn't running on :8000, or `ST_API_URL` points elsewhere |
+| Uploaded job stays "Queued" | The worker isn't running. Start `uv run python -m app.worker` (Compose starts it automatically) |
+| Job failed: "Could not detect the log format" | Set the source's format explicitly, or choose a format when uploading |
+| Upload rejected with 415 | The file is compressed or binary. Decompress it first (`gunzip access.log.gz`) |
+| auth.log times are off by hours | Set the source's time zone to the server's zone. Syslog timestamps carry no offset |
 | Login always returns 429 | Too many failed attempts. Wait 15 minutes (`ST_LOGIN_WINDOW_SECONDS`), or clear `login_attempts` in a dev database |
 | Logged out immediately after signing in over plain HTTP | `ST_COOKIE_SECURE=true` (or `ST_ENVIRONMENT=production`) needs HTTPS. Unset it for local HTTP |
 | `Roles missing. Run 'alembic upgrade head' first.` | Run migrations before `create-admin` |
@@ -127,8 +149,8 @@ docs/       spec, plan, per-phase reports
 | 0 | Environment inspection and plan ([report](docs/PHASE0_PLAN.md)) | ✅ |
 | 1 | Scaffold, health checks, Compose, CI ([report](docs/reports/phase-1.md)) | ✅ |
 | 2 | Auth, models, migrations, RBAC, audit ([report](docs/reports/phase-2.md)) | ✅ |
-| 3 | Parsers, ingestion, normalization | ⏳ next |
-| 4 | Detection engine, alert grouping | |
+| 3 | Parsers, ingestion, normalization ([report](docs/reports/phase-3.md)) | ✅ |
+| 4 | Detection engine, alert grouping | ⏳ next |
 | 5 | Dashboard, event explorer, alert UI | |
 | 6 | Incidents, rules UI, audit, exports | |
 | 7 | Test hardening, security checks | |

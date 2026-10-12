@@ -2,5 +2,18 @@
 
 from app.models.audit import AppConfig, AuditLog
 from app.models.auth import LoginAttempt, Role, User, UserSession
+from app.models.ingestion import Event, ImportedFile, IngestionError, IngestionJob, LogSource
 
-__all__ = ["AppConfig", "AuditLog", "LoginAttempt", "Role", "User", "UserSession"]
+__all__ = [
+    "AppConfig",
+    "AuditLog",
+    "Event",
+    "ImportedFile",
+    "IngestionError",
+    "IngestionJob",
+    "LogSource",
+    "LoginAttempt",
+    "Role",
+    "User",
+    "UserSession",
+]

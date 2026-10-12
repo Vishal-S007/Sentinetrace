@@ -1,6 +1,7 @@
 """Application settings, loaded from environment variables (never hardcoded secrets)."""
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, PostgresDsn, field_validator
@@ -27,6 +28,16 @@ class Settings(BaseSettings):
 
     # Upload limits (enforced from Phase 3 onward).
     max_upload_bytes: int = Field(default=50 * 1024 * 1024, gt=0)
+
+    # Ingestion
+    storage_dir: Path = Path("storage")
+    max_line_bytes: int = Field(default=16 * 1024, gt=0)
+    max_lines_per_file: int = Field(default=5_000_000, gt=0)
+    max_errors_per_job: int = Field(default=10_000, ge=0)
+    ingest_batch_size: int = Field(default=1000, gt=0, le=10_000)
+    worker_poll_seconds: float = Field(default=1.0, gt=0)
+    job_stale_minutes: int = Field(default=10, gt=0)
+    max_job_attempts: int = Field(default=3, gt=0)
 
     # Sessions
     session_idle_minutes: int = Field(default=60, gt=0)

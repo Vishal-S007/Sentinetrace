@@ -32,8 +32,10 @@ test('admin manages users, sees the audit trail, and RBAC applies to the new use
   const viewerName = `e2e.viewer.${suffix}`
   const viewerPassword = `viewer-password-${suffix}`
 
-  // Admin signs in and sees live system status.
+  // Admin signs in (lands on Log sources) and checks live system status.
   await signIn(page, ADMIN_USER, ADMIN_PASSWORD)
+  await expect(page.getByRole('heading', { name: 'Log sources' })).toBeVisible()
+  await page.getByRole('link', { name: 'System status' }).click()
   await expect(page.getByRole('heading', { name: 'System status' })).toBeVisible()
   await expect(page.getByText('Online')).toBeVisible()
   await expect(page.getByText('Connected')).toBeVisible()
@@ -58,7 +60,9 @@ test('admin manages users, sees the audit trail, and RBAC applies to the new use
   const viewerContext = await browser.newContext()
   const viewer = await viewerContext.newPage()
   await signIn(viewer, viewerName, viewerPassword)
-  await expect(viewer.getByRole('heading', { name: 'System status' })).toBeVisible()
+  await expect(viewer.getByRole('heading', { name: 'Log sources' })).toBeVisible()
+  // Viewers can read sources but get no create/upload controls.
+  await expect(viewer.getByRole('form', { name: 'Add log source' })).toHaveCount(0)
   const nav = viewer.getByRole('navigation', { name: 'Main' })
   await expect(nav.getByRole('link', { name: 'Users & roles' })).toHaveCount(0)
   await viewer.goto('/admin/users')

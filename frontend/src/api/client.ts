@@ -72,6 +72,101 @@ export interface UserCreate {
 
 export type UserUpdate = Partial<{ email: string | null; role: RoleName; is_active: boolean; password: string }>
 
+export type SourceFormat =
+  | 'auto'
+  | 'apache_combined'
+  | 'nginx_combined'
+  | 'nginx_common'
+  | 'nginx_custom'
+  | 'json'
+  | 'auth_log'
+export type JobStatus = 'queued' | 'running' | 'completed' | 'completed_with_errors' | 'failed'
+
+export interface LogFormat {
+  id: Exclude<SourceFormat, 'auto'>
+  label: string
+  example: string
+  detectable: boolean
+}
+
+export interface LogSource {
+  id: number
+  name: string
+  description: string
+  format: SourceFormat
+  custom_pattern: string | null
+  timezone: string
+  enabled: boolean
+  created_at: string
+  file_count: number
+  event_count: number
+  last_upload_at: string | null
+}
+
+export interface SourceCreate {
+  name: string
+  description?: string
+  format: SourceFormat
+  custom_pattern?: string | null
+  timezone: string
+}
+
+export type SourceUpdate = Partial<SourceCreate & { enabled: boolean }>
+
+export interface ImportedFile {
+  id: number
+  source_id: number
+  original_filename: string
+  sha256: string
+  size_bytes: number
+  encoding: string
+  uploaded_at: string
+}
+
+export interface Job {
+  id: number
+  status: JobStatus
+  source_id: number
+  source_name: string
+  file_id: number
+  filename: string
+  size_bytes: number
+  encoding: string
+  requested_format: string | null
+  format: string | null
+  total_lines: number
+  parsed_count: number
+  rejected_count: number
+  duplicate_count: number
+  errors_truncated: boolean
+  error_message: string | null
+  attempts: number
+  created_by: string | null
+  created_at: string
+  started_at: string | null
+  finished_at: string | null
+}
+
+export interface JobPage {
+  items: Job[]
+  next_before_id: number | null
+}
+
+export interface IngestionErrorRow {
+  id: number
+  line_number: number
+  reason: string
+  raw_line: string
+}
+
+export interface ErrorPage {
+  items: IngestionErrorRow[]
+  next_after_id: number | null
+  total_rejected: number
+  stored: number
+  truncated: boolean
+}
+
 // ---- Transport ----
 
 const UNSAFE = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
@@ -107,6 +202,8 @@ function describeValidation(detail: unknown): string | null {
 interface RequestOptions {
   method?: string
   body?: unknown
+  /** Multipart body; the browser sets the Content-Type boundary. */
+  form?: FormData
   acceptStatuses?: number[]
   /** Don't trigger the global logout on 401 (used by login and the initial /me probe). */
   quiet401?: boolean
@@ -115,7 +212,7 @@ interface RequestOptions {
 export async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const method = opts.method ?? 'GET'
   const headers: Record<string, string> = {}
-  if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
+  if (opts.body !== undefined && !opts.form) headers['Content-Type'] = 'application/json'
   if (UNSAFE.has(method)) {
     const csrf = readCookie(CSRF_COOKIE)
     if (csrf) headers['X-CSRF-Token'] = csrf
@@ -127,7 +224,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
       method,
       headers,
       credentials: 'same-origin',
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      body: opts.form ?? (opts.body !== undefined ? JSON.stringify(opts.body) : undefined),
     })
   } catch {
     throw new ApiError(0, 'Cannot reach the SentinelTrace API')
@@ -149,6 +246,13 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
   return (await resp.json()) as T
 }
 
+function toQuery(params: Record<string, string | number | undefined>): string {
+  const q = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== '') q.set(k, String(v))
+  const qs = q.toString()
+  return qs ? `?${qs}` : ''
+}
+
 // ---- Endpoints ----
 
 export const api = {
@@ -168,10 +272,24 @@ export const api = {
   createUser: (body: UserCreate) => request<User>('/api/users', { method: 'POST', body }),
   updateUser: (id: number, body: UserUpdate) => request<User>(`/api/users/${id}`, { method: 'PATCH', body }),
 
-  audit: (params: { action?: string; actor?: string; before_id?: number; limit?: number }) => {
-    const q = new URLSearchParams()
-    for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== '') q.set(k, String(v))
-    const qs = q.toString()
-    return request<AuditPage>(`/api/audit${qs ? `?${qs}` : ''}`)
+  formats: () => request<LogFormat[]>('/api/formats'),
+  sources: () => request<LogSource[]>('/api/sources'),
+  createSource: (body: SourceCreate) => request<LogSource>('/api/sources', { method: 'POST', body }),
+  updateSource: (id: number, body: SourceUpdate) =>
+    request<LogSource>(`/api/sources/${id}`, { method: 'PATCH', body }),
+  upload: (sourceId: number, file: File, format?: string) => {
+    const form = new FormData()
+    form.append('file', file)
+    if (format) form.append('format', format)
+    return request<{ file: ImportedFile; job: Job }>(`/api/sources/${sourceId}/files`, { method: 'POST', form })
   },
+  jobs: (params: { status?: string; source_id?: number; before_id?: number; limit?: number }) =>
+    request<JobPage>(`/api/jobs${toQuery(params)}`),
+  job: (id: number) => request<Job>(`/api/jobs/${id}`),
+  jobErrors: (id: number, after_id?: number) => request<ErrorPage>(`/api/jobs/${id}/errors${toQuery({ after_id })}`),
+  retryJob: (id: number) => request<Job>(`/api/jobs/${id}/retry`, { method: 'POST' }),
+  jobErrorsCsvUrl: (id: number) => `/api/jobs/${id}/errors.csv`,
+
+  audit: (params: { action?: string; actor?: string; before_id?: number; limit?: number }) =>
+    request<AuditPage>(`/api/audit${toQuery(params)}`),
 }

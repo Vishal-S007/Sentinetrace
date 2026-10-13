@@ -52,7 +52,8 @@ test('admin manages users, sees the audit trail, and RBAC applies to the new use
 
   // The creation is in the audit log.
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Audit log' }).click()
-  await page.getByLabel('Action').fill('user.create')
+  await expect(page.getByRole('heading', { name: 'Audit log' })).toBeVisible()
+  await page.getByLabel('Action', { exact: true }).fill('user.create')
   await page.getByRole('button', { name: 'Apply' }).click()
   await expect(page.getByText(viewerName).first()).toBeVisible()
 

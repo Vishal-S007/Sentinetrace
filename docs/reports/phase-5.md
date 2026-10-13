@@ -1,6 +1,6 @@
 # Phase 5 Report: Dashboard, Event Explorer, Alert Queue and Investigation UI
 
-Date: 2026-10-13 · Result: **Gate passed locally**, including three end-to-end runs through the browser, the API and the real worker. CI confirmation is pending on push.
+Date: 2026-10-13 · Result: **Gate passed** locally and in CI (backend, frontend, end-to-end and Docker Compose jobs).
 
 ## What was built
 
@@ -43,18 +43,24 @@ Date: 2026-10-13 · Result: **Gate passed locally**, including three end-to-end 
 - Severity is ordinal, so it uses one red ramp from light (low) to dark (critical) instead of four unrelated hues. The palette passes the ordinal colour-vision and contrast checks against the dark surface. Single-series charts use one blue.
 - Severity is never shown by colour alone: badges carry a label, the legend has fixed order with plain text, and every chart has a table view.
 
+### Operations
+- **Worker health check.** The worker touches a heartbeat file after each database poll, and `python -m app.worker --check-health` reports whether it is recent. Docker Compose uses this instead of a disabled health check. This fixes the CI Compose job, which had failed since Phase 3 because `docker compose up --wait` could not treat the worker as ready.
+- **CI diagnostics.** When the Compose job fails, the image build output, `docker compose ps` and each container's recent logs are published as job annotations. Playwright failures are reported the same way.
+- **E2E stability.** Navigation clicks are scoped to the main menu (the overview's tiles are links too), and the audit-log step waits for its page before filling the filter.
+
 ## Test results (all run locally)
 
 | Check | Result |
 |---|---|
-| Backend tests (`uv run pytest -q`, PostgreSQL 16) | **295 passed** (38 new) |
+| Backend tests (`uv run pytest -q`, PostgreSQL 16) | **300 passed** (43 new) |
 | — dashboard figures vs independent SQL, ranges, empty DB, permissions | 5 |
 | — explorer filters, CIDR, status classes, wildcard escaping, keyset walk, count cap, validation | 25 |
 | — event detail, alert status + audit, status survives re-detection, viewer blocked, title search | 8 |
+| — worker heartbeat and health check | 5 |
 | Backend lint / format / `alembic check` | passed / passed / no drift |
 | Frontend tests (Vitest) | **59 passed** (18 new) |
 | Frontend lint / typecheck / build | clean / clean / built |
-| End-to-end (Playwright, real API + worker) | **5 passed**, run three times against the same database |
+| End-to-end (Playwright, real API + worker) | **5 passed**, repeated 3× in one run against the same database (15/15) |
 
 ### Highlights of what is tested
 - **The dashboard agrees with raw SQL.** Totals, open and high/critical counts and per-severity counts are each checked against an independent query, and the time series must sum to the totals.
@@ -74,7 +80,7 @@ Date: 2026-10-13 · Result: **Gate passed locally**, including three end-to-end 
 - **Text search** is a substring match over the raw line, not a query language.
 - **Match counts stop at 10,000** and show as "10,000+".
 - **Dashboard time buckets are UTC.** Times are displayed in the browser's local time zone.
-- **Docker Compose** is still verified only in CI.
+- **Docker Compose** is verified in CI (it now passes); it was not run locally.
 
 ## Next: Phase 6
 - incidents that group related alerts

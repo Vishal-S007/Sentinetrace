@@ -32,16 +32,16 @@ test('admin manages users, sees the audit trail, and RBAC applies to the new use
   const viewerName = `e2e.viewer.${suffix}`
   const viewerPassword = `viewer-password-${suffix}`
 
-  // Admin signs in (lands on Log sources) and checks live system status.
+  // Admin signs in (lands on the security overview) and checks live system status.
   await signIn(page, ADMIN_USER, ADMIN_PASSWORD)
-  await expect(page.getByRole('heading', { name: 'Log sources' })).toBeVisible()
-  await page.getByRole('link', { name: 'System status' }).click()
+  await expect(page.getByRole('heading', { name: 'Security overview' })).toBeVisible()
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'System status' }).click()
   await expect(page.getByRole('heading', { name: 'System status' })).toBeVisible()
   await expect(page.getByText('Online')).toBeVisible()
   await expect(page.getByText('Connected')).toBeVisible()
 
   // Create a viewer.
-  await page.getByRole('link', { name: 'Users & roles' }).click()
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Users & roles' }).click()
   const form = page.getByRole('form', { name: 'Create user' })
   await form.getByLabel(/Username/).fill(viewerName)
   await form.getByLabel(/Initial password/).fill(viewerPassword)
@@ -51,7 +51,7 @@ test('admin manages users, sees the audit trail, and RBAC applies to the new use
   await expect(page.getByRole('cell', { name: viewerName })).toBeVisible()
 
   // The creation is in the audit log.
-  await page.getByRole('link', { name: 'Audit log' }).click()
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Audit log' }).click()
   await page.getByLabel('Action').fill('user.create')
   await page.getByRole('button', { name: 'Apply' }).click()
   await expect(page.getByText(viewerName).first()).toBeVisible()
@@ -60,6 +60,8 @@ test('admin manages users, sees the audit trail, and RBAC applies to the new use
   const viewerContext = await browser.newContext()
   const viewer = await viewerContext.newPage()
   await signIn(viewer, viewerName, viewerPassword)
+  await expect(viewer.getByRole('heading', { name: 'Security overview' })).toBeVisible()
+  await viewer.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Log sources' }).click()
   await expect(viewer.getByRole('heading', { name: 'Log sources' })).toBeVisible()
   // Viewers can read sources but get no create/upload controls.
   await expect(viewer.getByRole('form', { name: 'Add log source' })).toHaveCount(0)
@@ -72,7 +74,7 @@ test('admin manages users, sees the audit trail, and RBAC applies to the new use
   expect(apiStatus).toBe(403)
 
   // Admin disables the viewer; the viewer's session ends immediately.
-  await page.getByRole('link', { name: 'Users & roles' }).click()
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Users & roles' }).click()
   const row = page.getByRole('row').filter({ hasText: viewerName })
   await row.getByRole('button', { name: 'Disable' }).click()
   await expect(row.getByText('Disabled')).toBeVisible()

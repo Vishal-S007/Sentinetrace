@@ -2,7 +2,7 @@
 
 A log analysis and threat detection platform. It ingests web-server and authentication logs, normalizes them, runs deterministic detection rules, and presents evidence-backed alerts for investigation.
 
-> **Status:** Phase 4 (detection engine) complete. See [Development progress](#development-progress). This is a local MVP under active development, not a production security product.
+> **Status:** Phase 5 (dashboard, event explorer and alert investigation UI) complete. See [Development progress](#development-progress). This is a local MVP under active development, not a production security product.
 
 **Stack:** FastAPI · SQLAlchemy · Alembic · PostgreSQL 16 · React 19 · TypeScript · Vite · Tailwind CSS · Recharts · Pytest · Vitest · Playwright · Docker Compose
 
@@ -125,6 +125,14 @@ python3 datasets/synthetic/generate.py
 cd backend && uv run pytest tests/test_synthetic_dataset.py -s
 ```
 
+## Investigating alerts
+
+After signing in, the **Security overview** shows activity for the selected range (24 hours to all time). Every number, bar and list item links to the matching filtered view.
+
+- **Alert queue** (`/alerts`): filter by status, severity, rule, source IP or title. Filters live in the URL, so a view can be bookmarked or shared.
+- **Alert page:** what was observed, why the confidence level was chosen, recommended steps, and the original log lines as evidence. Analysts and admins can change the status with a note; each change is recorded in the audit log.
+- **Event explorer** (`/events`): search the raw log text and filter by time, IP or CIDR (`203.0.113.0/24`), event type, HTTP status (`404` or `4xx`), method, username, source, or whether detection flagged the event. Open any row to see every field and the alerts that reference it.
+
 ## Authentication and roles
 
 | Role | Can do |
@@ -164,6 +172,7 @@ cd backend && uv run pytest tests/test_synthetic_dataset.py -s
 | Logged out immediately after signing in over plain HTTP | `ST_COOKIE_SECURE=true` (or `ST_ENVIRONMENT=production`) needs HTTPS. Unset it for local HTTP |
 | `Roles missing. Run 'alembic upgrade head' first.` | Run migrations before `create-admin` |
 | `dev-postgres.sh`: binaries not found | Install PostgreSQL 16 (e.g. `brew install postgresql@16` or `apt install postgresql-16`) |
+| Overview shows zeros after importing older logs | The range is relative to now; choose **All time** (the page offers it when older data exists) |
 
 ## Development progress
 
@@ -174,8 +183,8 @@ cd backend && uv run pytest tests/test_synthetic_dataset.py -s
 | 2 | Auth, models, migrations, RBAC, audit ([report](docs/reports/phase-2.md)) | ✅ |
 | 3 | Parsers, ingestion, normalization ([report](docs/reports/phase-3.md)) | ✅ |
 | 4 | Detection engine, alert grouping ([report](docs/reports/phase-4.md)) | ✅ |
-| 5 | Dashboard, event explorer, alert UI | ⏳ next |
-| 6 | Incidents, rules UI, audit, exports | |
+| 5 | Dashboard, event explorer, alert UI ([report](docs/reports/phase-5.md)) | ✅ |
+| 6 | Incidents, rules UI, audit, exports | ⏳ next |
 | 7 | Test hardening, security checks | |
 | 8 | Full system acceptance | |
 

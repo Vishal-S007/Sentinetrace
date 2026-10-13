@@ -9,7 +9,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api.routes import audit, auth, detection, health, jobs, sources, users
+from app.api.routes import (
+    audit,
+    auth,
+    dashboard,
+    detection,
+    events,
+    health,
+    jobs,
+    sources,
+    users,
+)
 from app.core.config import Settings, get_settings
 from app.core.limits import BodySizeLimitMiddleware
 
@@ -89,6 +99,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(sources.router, prefix="/api")
     app.include_router(jobs.router, prefix="/api")
     app.include_router(detection.router, prefix="/api")
+    app.include_router(dashboard.router, prefix="/api")
+    app.include_router(events.router, prefix="/api")
     return app
 
 

@@ -33,7 +33,7 @@ test('import a log file: create source, upload, process, inspect results and rej
   await signIn(page)
 
   // Create a source.
-  await page.getByRole('link', { name: 'Log sources' }).click()
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Log sources' }).click()
   const create = page.getByRole('form', { name: 'Add log source' })
   await create.getByLabel('Name').fill(sourceName)
   await create.getByLabel('Format').selectOption('apache_combined')
@@ -69,7 +69,7 @@ test('import a log file: create source, upload, process, inspect results and rej
   expect(csv).toContain(`this line is not an access log entry ${runId}`)
 
   // Uploading the identical file again is refused as a duplicate.
-  await page.getByRole('link', { name: 'Log sources' }).click()
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Log sources' }).click()
   const again = page.getByRole('form', { name: `Upload to ${sourceName}` })
   await again.getByLabel(`Log file for ${sourceName}`).setInputFiles({
     name: 'renamed.log',
@@ -80,7 +80,7 @@ test('import a log file: create source, upload, process, inspect results and rej
   await expect(again.getByRole('alert')).toContainText('already imported')
 
   // The jobs list shows the job with its counts.
-  await page.getByRole('link', { name: 'Ingestion jobs' }).click()
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Ingestion jobs' }).click()
   const jobRow = page.getByRole('row').filter({ hasText: `access-${runId}.log` })
   await expect(jobRow.getByText('Completed with errors')).toBeVisible()
 })

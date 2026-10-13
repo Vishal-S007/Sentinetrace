@@ -27,6 +27,7 @@ from app.schemas.detection import (
     AlertOut,
     AlertPage,
     AlertStatus,
+    AlertStatusUpdate,
     DetectionRunCreate,
     DetectionRunOut,
     EvidenceEventOut,
@@ -43,6 +44,7 @@ router = APIRouter(tags=["detection"])
 RuleReader = Annotated[AuthContext, Depends(require(Permission.RULES_READ))]
 RuleManager = Annotated[AuthContext, Depends(require(Permission.RULES_MANAGE))]
 AlertReader = Annotated[AuthContext, Depends(require(Permission.ALERTS_READ))]
+AlertTriager = Annotated[AuthContext, Depends(require(Permission.ALERTS_TRIAGE))]
 
 
 # --- Rules ------------------------------------------------------------------------------
@@ -242,6 +244,9 @@ def list_alerts(
     severity: Severity | None = None,
     rule_id: Annotated[str | None, Query(max_length=32)] = None,
     source_ip: Annotated[str | None, Query(max_length=45)] = None,
+    q: Annotated[
+        str | None, Query(min_length=2, max_length=200, description="Substring of the alert title")
+    ] = None,
     since: datetime | None = None,
     until: datetime | None = None,
     before_id: Annotated[int | None, Query(gt=0)] = None,
@@ -262,6 +267,9 @@ def list_alerts(
                 status.HTTP_422_UNPROCESSABLE_CONTENT, "source_ip must be a valid IP address"
             ) from exc
         stmt = stmt.where(Alert.source_ip == ip)
+    if q:
+        escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        stmt = stmt.where(Alert.title.ilike(f"%{escaped}%", escape="\\"))
     if since:
         stmt = stmt.where(Alert.last_seen >= since)
     if until:
@@ -347,3 +355,26 @@ def get_alert_evidence(
         total_events=a.event_count,
         truncated=a.evidence_truncated,
     )
+
+
+@router.patch("/alerts/{alert_id}", response_model=AlertDetailOut)
+def update_alert_status(
+    alert_id: int, body: AlertStatusUpdate, auth: AlertTriager, request: Request, db: DbSession
+) -> AlertDetailOut:
+    """Change an alert's triage status. Every change is recorded in the audit trail."""
+    a = _get_alert(db, alert_id)
+    if a.status != body.status:
+        previous = a.status
+        a.status = body.status
+        audit.record(
+            db,
+            "alert.status_change",
+            actor=auth.user,
+            target_type="alert",
+            target_id=a.id,
+            request=request,
+            details={"from": previous, "to": body.status, "note": body.note, "rule_id": a.rule_id},
+        )
+        db.commit()
+        db.refresh(a)
+    return get_alert(alert_id, auth, db)

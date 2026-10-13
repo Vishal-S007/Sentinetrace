@@ -160,3 +160,10 @@ class DetectionRunOut(BaseModel):
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+
+
+class AlertStatusUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: AlertStatus
+    note: str = Field(default="", max_length=1000)

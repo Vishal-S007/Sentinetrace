@@ -167,6 +167,165 @@ export interface ErrorPage {
   truncated: boolean
 }
 
+export type Severity = 'low' | 'medium' | 'high' | 'critical'
+export type AlertStatus = 'new' | 'investigating' | 'resolved' | 'false_positive'
+export type Confidence = 'low' | 'medium' | 'high'
+export type DashboardRange = '24h' | '7d' | '30d' | '90d' | 'all'
+
+export interface Alert {
+  id: number
+  rule_id: string
+  rule_name: string
+  rule_version: number
+  title: string
+  severity: Severity
+  status: AlertStatus
+  confidence: Confidence
+  source_ip: string | null
+  username: string | null
+  endpoint: string | null
+  first_seen: string
+  last_seen: string
+  event_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface AlertDetail extends Alert {
+  reason: string
+  confidence_reason: string
+  recommended_action: string
+  recommended_steps: string[]
+  window_seconds: number
+  bucket_start: string
+  evidence_truncated: boolean
+  evidence_count: number
+  details: Record<string, unknown>
+  assigned_to: number | null
+}
+
+export interface AlertPage {
+  items: Alert[]
+  next_before_id: number | null
+}
+
+export interface EvidenceItem {
+  event_id: number
+  indicator: string | null
+  event_time: string
+  event_type: string
+  source_ip: string | null
+  username: string | null
+  http_method: string | null
+  path: string | null
+  query: string | null
+  http_status: number | null
+  user_agent: string | null
+  source_id: number
+  file_id: number
+  line_number: number
+  raw_line: string
+}
+
+export interface EvidencePage {
+  items: EvidenceItem[]
+  next_after_id: number | null
+  total_linked: number
+  total_events: number
+  truncated: boolean
+}
+
+export interface RuleSummary {
+  rule_id: string
+  name: string
+  category: string
+  severity: Severity
+  enabled: boolean
+}
+
+export interface EventItem {
+  id: number
+  event_time: string
+  ingested_at: string
+  event_type: string
+  source_ip: string | null
+  username: string | null
+  http_method: string | null
+  path: string | null
+  query: string | null
+  http_status: number | null
+  bytes_sent: number | null
+  user_agent: string | null
+  host: string | null
+  severity: string | null
+  message: string | null
+  source_id: number
+  source_name: string
+  raw_line: string
+  alert_count: number
+  max_alert_severity: Severity | null
+}
+
+export interface EventPage {
+  items: EventItem[]
+  next_cursor: string | null
+  count: number | null
+  count_capped: boolean
+}
+
+export interface EventDetail extends EventItem {
+  referrer: string | null
+  http_version: string | null
+  attributes: Record<string, unknown>
+  file_id: number
+  filename: string
+  line_number: number
+  job_id: number
+  alerts: { id: number; rule_id: string; title: string; severity: Severity; status: AlertStatus; indicator: string | null }[]
+}
+
+export interface Dashboard {
+  range: DashboardRange
+  start: string | null
+  end: string
+  bucket: 'hour' | 'day' | 'week'
+  totals: { events: number; alerts: number; open_alerts: number; high_open_alerts: number; sources: number; files: number }
+  alerts_by_severity: { key: Severity; count: number }[]
+  alerts_by_status: { key: AlertStatus; count: number }[]
+  events_over_time: { bucket_start: string; count: number }[]
+  alerts_over_time: ({ bucket_start: string } & Record<Severity, number>)[]
+  top_source_ips: { source_ip: string; alert_count: number; event_count: number; max_severity: Severity }[]
+  top_rules: { rule_id: string; name: string; alert_count: number }[]
+  recent_jobs: { id: number; status: JobStatus; filename: string; source_name: string; parsed_count: number; rejected_count: number; created_at: string }[]
+  recent_high_alerts: Alert[]
+  data_range: { first_event: string | null; last_event: string | null }
+}
+
+export type EventFilters = Partial<{
+  q: string
+  since: string
+  until: string
+  source_ip: string
+  event_type: string
+  http_status: string
+  method: string
+  username: string
+  source_id: string
+  flagged: string
+  alert_severity: string
+  alert_id: string
+}>
+
+export type AlertFilters = Partial<{
+  status: string
+  severity: string
+  rule_id: string
+  source_ip: string
+  q: string
+  since: string
+  until: string
+}>
+
 // ---- Transport ----
 
 const UNSAFE = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
@@ -289,6 +448,19 @@ export const api = {
   jobErrors: (id: number, after_id?: number) => request<ErrorPage>(`/api/jobs/${id}/errors${toQuery({ after_id })}`),
   retryJob: (id: number) => request<Job>(`/api/jobs/${id}/retry`, { method: 'POST' }),
   jobErrorsCsvUrl: (id: number) => `/api/jobs/${id}/errors.csv`,
+
+  dashboard: (range: DashboardRange) => request<Dashboard>(`/api/dashboard${toQuery({ range })}`),
+  events: (filters: EventFilters, cursor?: string, limit = 50) =>
+    request<EventPage>(`/api/events${toQuery({ ...filters, cursor, limit, with_count: 'true' })}`),
+  event: (id: number) => request<EventDetail>(`/api/events/${id}`),
+  alerts: (filters: AlertFilters, before_id?: number, limit = 50) =>
+    request<AlertPage>(`/api/alerts${toQuery({ ...filters, before_id, limit })}`),
+  alert: (id: number) => request<AlertDetail>(`/api/alerts/${id}`),
+  alertEvidence: (id: number, after_id?: number, limit = 50) =>
+    request<EvidencePage>(`/api/alerts/${id}/evidence${toQuery({ after_id, limit })}`),
+  setAlertStatus: (id: number, status: AlertStatus, note = '') =>
+    request<AlertDetail>(`/api/alerts/${id}`, { method: 'PATCH', body: { status, note } }),
+  rules: () => request<RuleSummary[]>('/api/rules'),
 
   audit: (params: { action?: string; actor?: string; before_id?: number; limit?: number }) =>
     request<AuditPage>(`/api/audit${toQuery(params)}`),

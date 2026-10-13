@@ -141,6 +141,13 @@ class Event(Base):
         Index("ix_events_status_time", "http_status", "event_time"),
         Index("ix_events_source_time", "source_id", "event_time"),
         Index("ix_events_job", "job_id"),
+        # Substring search over the original line (event explorer); needs pg_trgm.
+        Index(
+            "ix_events_raw_line_trgm",
+            "raw_line",
+            postgresql_using="gin",
+            postgresql_ops={"raw_line": "gin_trgm_ops"},
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)

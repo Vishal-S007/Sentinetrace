@@ -1,10 +1,13 @@
-import { useState } from 'react'
-import { NavLink, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
+import { lazy, Suspense, useState } from 'react'
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 
 import { ApiError } from './api/client'
 import { useAuth } from './auth/AuthContext'
 import { RequireAuth, RequirePermission } from './auth/guards'
 import { AccountPage } from './pages/AccountPage'
+import { AlertDetailPage } from './pages/AlertDetailPage'
+import { AlertsPage } from './pages/AlertsPage'
+import { EventsPage } from './pages/EventsPage'
 import { AuditPage } from './pages/AuditPage'
 import { JobDetailPage } from './pages/JobDetailPage'
 import { JobsPage } from './pages/JobsPage'
@@ -13,8 +16,14 @@ import { SourcesPage } from './pages/SourcesPage'
 import { StatusPage } from './pages/StatusPage'
 import { UsersPage } from './pages/UsersPage'
 
+// The dashboard pulls in the charting library; load it on demand to keep the main bundle small.
+const DashboardPage = lazy(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })))
+
 // Only screens that are implemented appear here; each later phase adds its own.
 const NAV: { to: string; label: string; permission?: string }[] = [
+  { to: '/dashboard', label: 'Overview', permission: 'events:read' },
+  { to: '/alerts', label: 'Alerts', permission: 'alerts:read' },
+  { to: '/events', label: 'Events', permission: 'events:read' },
   { to: '/sources', label: 'Log sources', permission: 'events:read' },
   { to: '/jobs', label: 'Ingestion jobs', permission: 'events:read' },
   { to: '/status', label: 'System status' },
@@ -25,6 +34,7 @@ const NAV: { to: string; label: string; permission?: string }[] = [
 function Shell() {
   const { state, can, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [logoutError, setLogoutError] = useState<string | null>(null)
   if (state.status !== 'authenticated') return null
   const { user } = state.me
@@ -82,7 +92,41 @@ function Shell() {
       </aside>
       <main className="flex-1 overflow-y-auto p-4 md:p-8">
         <Routes>
-          <Route path="/" element={<Navigate to={can('events:read') ? '/sources' : '/status'} replace />} />
+          <Route path="/" element={<Navigate to={can('events:read') ? '/dashboard' : '/status'} replace />} />
+          <Route
+            path="/dashboard"
+            element={
+              <RequirePermission permission="events:read">
+                <Suspense fallback={<p role="status" className="text-sm text-ink-dim">Loading overview…</p>}>
+                  <DashboardPage />
+                </Suspense>
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/alerts"
+            element={
+              <RequirePermission permission="alerts:read">
+                <AlertsPage key={location.search} />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/alerts/:id"
+            element={
+              <RequirePermission permission="alerts:read">
+                <AlertDetailPage key={location.pathname} />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/events"
+            element={
+              <RequirePermission permission="events:read">
+                <EventsPage key={location.search} />
+              </RequirePermission>
+            }
+          />
           <Route
             path="/sources"
             element={

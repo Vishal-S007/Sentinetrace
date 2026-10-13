@@ -128,7 +128,9 @@ jobs:
         run: |
           echo "ST_PG_PASSWORD=$CI_PG_PASSWORD" > .env
           docker compose config --quiet
-          docker compose up --build -d --wait --wait-timeout 180
+          set -o pipefail
+          docker compose build 2>&1 | tee build.log
+          docker compose up -d --wait --wait-timeout 180
       - name: Check health through the frontend proxy
         run: |
           curl -fsS http://127.0.0.1:8080/api/health
@@ -178,5 +180,17 @@ jobs:
           python3 -c 'import json;r=sorted({a["rule_id"] for a in json.load(open("alerts.json"))["items"]});e=["ST-CORR-001","ST-WEB-001","ST-WEB-002","ST-WEB-003","ST-WEB-004","ST-WEB-005","ST-WEB-006","ST-WEB-007"];assert r==e,r;print("detected rules:",r)'
       - if: always()
         run: docker compose logs --no-color | tail -200
+      - name: Summarize failure as annotations
+        if: failure()
+        run: |
+          annotate() {  # title, text -> one error annotation (newlines encoded)
+            msg=$(printf '%s' "$2" | tail -c 3500 | sed 's/%/%25/g; s/\r//g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=$1::$msg"
+          }
+          [ -f build.log ] && annotate "image build (tail)" "$(tail -40 build.log)"
+          annotate "compose ps" "$(docker compose ps -a 2>&1)"
+          for s in db backend worker frontend; do
+            annotate "logs: $s" "$(docker compose logs --no-color --tail 30 $s 2>&1)"
+          done
       - if: always()
         run: docker compose down -v

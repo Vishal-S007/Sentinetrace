@@ -160,6 +160,22 @@ jobs:
           done
           curl -fsS -b jar.txt http://127.0.0.1:8080/api/jobs/$job | tee job.json
           python3 -c 'import json;j=json.load(open("job.json"));assert (j["status"],j["parsed_count"],j["rejected_count"])==("completed_with_errors",5,3), j'
+      - name: Detection runs in the worker container on the synthetic dataset
+        run: |
+          csrf=$(awk '$6=="st_csrf"{print $7}' jar.txt)
+          sid=$(curl -fsS -b jar.txt -H "X-CSRF-Token: $csrf" -H 'Content-Type: application/json' \
+            -d '{"name":"ci-synthetic","format":"apache_combined"}' \
+            http://127.0.0.1:8080/api/sources | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')
+          job=$(curl -fsS -b jar.txt -H "X-CSRF-Token: $csrf" -F "file=@datasets/synthetic/web_access.log" \
+            http://127.0.0.1:8080/api/sources/$sid/files | python3 -c 'import sys,json;print(json.load(sys.stdin)["job"]["id"])')
+          for i in $(seq 1 90); do
+            state=$(curl -fsS -b jar.txt http://127.0.0.1:8080/api/detection/runs | JOB=$job python3 -c 'import os,sys,json;print(next((r["status"] for r in json.load(sys.stdin) if r["job_id"]==int(os.environ["JOB"])),"pending"))')
+            [ "$state" = completed ] && break
+            sleep 2
+          done
+          test "$state" = completed
+          curl -fsS -b jar.txt "http://127.0.0.1:8080/api/alerts?limit=200" > alerts.json
+          python3 -c 'import json;r=sorted({a["rule_id"] for a in json.load(open("alerts.json"))["items"]});e=["ST-CORR-001","ST-WEB-001","ST-WEB-002","ST-WEB-003","ST-WEB-004","ST-WEB-005","ST-WEB-006","ST-WEB-007"];assert r==e,r;print("detected rules:",r)'
       - if: always()
         run: docker compose logs --no-color | tail -200
       - if: always()

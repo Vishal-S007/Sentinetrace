@@ -2,9 +2,21 @@
 
 from app.models.audit import AppConfig, AuditLog
 from app.models.auth import LoginAttempt, Role, User, UserSession
+from app.models.detection import (
+    Alert,
+    AlertEvent,
+    DetectionRule,
+    DetectionRuleVersion,
+    DetectionRun,
+)
 from app.models.ingestion import Event, ImportedFile, IngestionError, IngestionJob, LogSource
 
 __all__ = [
+    "Alert",
+    "AlertEvent",
+    "DetectionRule",
+    "DetectionRuleVersion",
+    "DetectionRun",
     "AppConfig",
     "AuditLog",
     "Event",

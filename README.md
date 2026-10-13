@@ -2,7 +2,7 @@
 
 A log analysis and threat detection platform. It ingests web-server and authentication logs, normalizes them, runs deterministic detection rules, and presents evidence-backed alerts for investigation.
 
-> **Status:** Phase 3 (log ingestion and parsing) complete. See [Development progress](#development-progress). This is a local MVP under active development, not a production security product.
+> **Status:** Phase 4 (detection engine) complete. See [Development progress](#development-progress). This is a local MVP under active development, not a production security product.
 
 **Stack:** FastAPI · SQLAlchemy · Alembic · PostgreSQL 16 · React 19 · TypeScript · Vite · Tailwind CSS · Recharts · Pytest · Vitest · Playwright · Docker Compose
 
@@ -83,7 +83,8 @@ CI (`.github/workflows/ci.yml`) runs four jobs on every push:
 ## Project layout
 
 ```
-backend/    FastAPI app (app/), parsers (app/ingestion/), worker (app/worker.py), tests/, Alembic migrations (alembic/), CLI (app/cli.py)
+backend/    FastAPI app (app/), parsers (app/ingestion/), detection (app/detection/), worker (app/worker.py), tests/, Alembic migrations (alembic/), CLI (app/cli.py)
+datasets/   synthetic/: deterministic generator + ground truth for evaluating detection
 frontend/   React + Vite SPA, Vitest tests (src/**/*.test.tsx), Playwright specs (e2e/)
 scripts/    dev-postgres.sh: Docker-free local database
 docs/       spec, plan, per-phase reports
@@ -103,6 +104,26 @@ docs/       spec, plan, per-phase reports
    - a Retry button when the job failed
 
 Details of each format, field mapping, limits and duplicate handling: [docs/log-formats.md](docs/log-formats.md).
+
+## Detection
+
+After each import, the worker runs 10 deterministic rules over the new events:
+- authentication failures and brute force
+- SQL injection, XSS and path traversal indicators
+- request bursts
+- repeated 401/403 responses
+- 404 reconnaissance
+- suspicious methods
+- multi-stage correlation
+
+Alerts are grouped per entity and hour, linked to their evidence events, and explained with a confidence level. Admins can tune thresholds through the API; every change is versioned and audited. Rules, logic and evaluation: [docs/detection-rules.md](docs/detection-rules.md).
+
+```bash
+# Regenerate the synthetic evaluation dataset (deterministic)
+python3 datasets/synthetic/generate.py
+# Evaluate detection against its ground truth (prints precision/recall)
+cd backend && uv run pytest tests/test_synthetic_dataset.py -s
+```
 
 ## Authentication and roles
 
@@ -133,6 +154,8 @@ Details of each format, field mapping, limits and duplicate handling: [docs/log-
 | `/api/ready` returns 503 | PostgreSQL isn't reachable. Run `scripts/dev-postgres.sh status`, check the URL and password |
 | `ST_DATABASE_URL must use the postgresql+psycopg:// scheme` | Use the `postgresql+psycopg://` prefix, not `postgres://` |
 | Status page says "API unreachable" | The backend isn't running on :8000, or `ST_API_URL` points elsewhere |
+| No alerts after an import | Alerts appear after the job's detection run completes (`GET /api/detection/runs`). Check that rules are enabled (`GET /api/rules`) |
+| Changed a threshold but old alerts remain | Alerts are never deleted automatically. Queue a rescan (`POST /api/detection/runs`) to apply new thresholds to past events |
 | Uploaded job stays "Queued" | The worker isn't running. Start `uv run python -m app.worker` (Compose starts it automatically) |
 | Job failed: "Could not detect the log format" | Set the source's format explicitly, or choose a format when uploading |
 | Upload rejected with 415 | The file is compressed or binary. Decompress it first (`gunzip access.log.gz`) |
@@ -150,8 +173,8 @@ Details of each format, field mapping, limits and duplicate handling: [docs/log-
 | 1 | Scaffold, health checks, Compose, CI ([report](docs/reports/phase-1.md)) | ✅ |
 | 2 | Auth, models, migrations, RBAC, audit ([report](docs/reports/phase-2.md)) | ✅ |
 | 3 | Parsers, ingestion, normalization ([report](docs/reports/phase-3.md)) | ✅ |
-| 4 | Detection engine, alert grouping | ⏳ next |
-| 5 | Dashboard, event explorer, alert UI | |
+| 4 | Detection engine, alert grouping ([report](docs/reports/phase-4.md)) | ✅ |
+| 5 | Dashboard, event explorer, alert UI | ⏳ next |
 | 6 | Incidents, rules UI, audit, exports | |
 | 7 | Test hardening, security checks | |
 | 8 | Full system acceptance | |

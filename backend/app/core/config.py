@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     job_stale_minutes: int = Field(default=10, gt=0)
     max_job_attempts: int = Field(default=3, gt=0)
 
+    # Detection
+    alert_group_minutes: int = Field(default=60, ge=5, le=1440)
+    max_evidence_per_alert: int = Field(default=500, ge=10, le=100_000)
+    detection_chunk_hours: int = Field(default=24, ge=1, le=24 * 31)
+
     # Sessions
     session_idle_minutes: int = Field(default=60, gt=0)
     session_absolute_hours: int = Field(default=12, gt=0)

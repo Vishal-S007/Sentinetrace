@@ -1,4 +1,4 @@
-"""Background worker: processes queued ingestion jobs.
+"""Background worker: processes queued ingestion jobs, then queued detection runs.
 
 uv run python -m app.worker          # run until stopped (Ctrl+C / SIGTERM)
 uv run python -m app.worker --once   # process everything queued, then exit
@@ -12,6 +12,7 @@ import time
 
 from app.core.config import get_settings
 from app.db.session import get_sessionmaker
+from app.detection.runs import claim_next_run, process_run
 from app.ingestion.processor import claim_next_job, process_job, recover_stale_jobs
 
 logger = logging.getLogger("sentineltrace.worker")
@@ -47,6 +48,19 @@ def run(once: bool = False) -> int:
                     job.parsed_count,
                     job.rejected_count,
                     job.duplicate_count,
+                )
+                processed += 1
+                continue
+            run_item = claim_next_run(db)
+            if run_item is not None:
+                logger.info("Detection run %s (%s)", run_item.id, run_item.trigger)
+                process_run(db, run_item, settings)
+                logger.info(
+                    "Detection run %s %s: %s alert(s) created, %s updated",
+                    run_item.id,
+                    run_item.status,
+                    run_item.alerts_created,
+                    run_item.alerts_updated,
                 )
                 processed += 1
                 continue

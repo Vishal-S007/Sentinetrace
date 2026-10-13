@@ -26,11 +26,12 @@ from sqlalchemy import delete, insert, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
+from app.detection.runs import enqueue_for_job
 from app.ingestion.detect import detect_format
 from app.ingestion.parsers import PatternError, build_parser
 from app.ingestion.storage import file_sha256, resolve_storage_path
 from app.ingestion.types import ParseContext, ParsedEvent, ParseError
-from app.models import Event, IngestionError, IngestionJob, LogSource
+from app.models import AlertEvent, Event, IngestionError, IngestionJob, LogSource
 
 logger = logging.getLogger("sentineltrace.ingestion")
 
@@ -125,6 +126,12 @@ def recover_stale_jobs(db: Session, settings: Settings) -> int:
 
 def reset_job_for_retry(db: Session, job: IngestionJob) -> None:
     """Delete this job's partial results and queue it again (idempotent reprocessing)."""
+    # Evidence links to this job's partial events go first (re-detection recreates them).
+    db.execute(
+        delete(AlertEvent).where(
+            AlertEvent.event_id.in_(select(Event.id).where(Event.job_id == job.id))
+        )
+    )
     db.execute(delete(Event).where(Event.job_id == job.id))
     db.execute(delete(IngestionError).where(IngestionError.job_id == job.id))
     job.status = "queued"
@@ -247,6 +254,9 @@ def _finish(db: Session, job: IngestionJob, status: str, message: str | None = N
     job.error_message = message
     job.finished_at = utcnow()
     job.heartbeat_at = job.finished_at
+    if status in ("completed", "completed_with_errors"):
+        # Detection runs over the new events' time range (picked up by the worker).
+        enqueue_for_job(db, job)
     db.commit()
 
 

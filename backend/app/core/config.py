@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     worker_poll_seconds: float = Field(default=1.0, gt=0)
     job_stale_minutes: int = Field(default=10, gt=0)
     max_job_attempts: int = Field(default=3, gt=0)
+    # The worker touches this file after each successful poll of the database; the
+    # container health check (`python -m app.worker --check-health`) reads its age.
+    worker_heartbeat_file: Path | None = None
 
     # Detection
     alert_group_minutes: int = Field(default=60, ge=5, le=1440)

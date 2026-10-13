@@ -46,13 +46,19 @@ services:
     environment:
       ST_ENVIRONMENT: ${ST_ENVIRONMENT:-development}
       ST_DATABASE_URL: postgresql+psycopg://sentineltrace:${ST_PG_PASSWORD}@db:5432/sentineltrace
+      ST_WORKER_HEARTBEAT_FILE: /tmp/worker-heartbeat
     volumes:
       - storage:/app/storage
     depends_on:
       backend:
         condition: service_healthy  # migrations have run
+    # Healthy while the worker loop keeps reaching the database (heartbeat file age).
     healthcheck:
-      disable: true
+      test: ["CMD", "python", "-m", "app.worker", "--check-health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
     restart: unless-stopped
 
   frontend:

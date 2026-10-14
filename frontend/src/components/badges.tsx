@@ -1,5 +1,5 @@
-import type { AlertStatus, Confidence, Severity } from '../api/client'
-import { SEVERITY_COLOR, SEVERITY_LABEL, STATUS_LABEL } from '../lib/severity'
+import type { AlertStatus, Confidence, IncidentStatus, Severity } from '../api/client'
+import { INCIDENT_STATUS_LABEL, SEVERITY_COLOR, SEVERITY_LABEL, STATUS_LABEL } from '../lib/severity'
 
 export function SeverityBadge({ severity }: { severity: Severity }) {
   return (
@@ -35,6 +35,22 @@ export function ConfidenceLabel({ confidence }: { confidence: Confidence }) {
         ))}
       </span>
       <span className="capitalize">{confidence} confidence</span>
+    </span>
+  )
+}
+
+const INCIDENT_STYLE: Record<IncidentStatus, string> = {
+  open: 'border-accent/50 text-accent',
+  investigating: 'border-warn/50 text-warn',
+  contained: 'border-warn/50 text-ink',
+  resolved: 'border-ok/50 text-ok',
+  closed: 'border-line text-ink-dim',
+}
+
+export function IncidentStatusBadge({ status }: { status: IncidentStatus }) {
+  return (
+    <span className={`inline-block whitespace-nowrap rounded-full border px-2 py-0.5 text-xs ${INCIDENT_STYLE[status]}`}>
+      {INCIDENT_STATUS_LABEL[status]}
     </span>
   )
 }

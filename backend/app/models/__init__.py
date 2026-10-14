@@ -9,6 +9,7 @@ from app.models.detection import (
     DetectionRuleVersion,
     DetectionRun,
 )
+from app.models.incidents import Incident, IncidentAlert, InvestigationNote
 from app.models.ingestion import Event, ImportedFile, IngestionError, IngestionJob, LogSource
 
 __all__ = [
@@ -20,6 +21,9 @@ __all__ = [
     "AppConfig",
     "AuditLog",
     "Event",
+    "Incident",
+    "IncidentAlert",
+    "InvestigationNote",
     "ImportedFile",
     "IngestionError",
     "IngestionJob",

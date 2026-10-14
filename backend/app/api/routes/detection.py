@@ -16,22 +16,31 @@ from app.detection.runs import enqueue_manual
 from app.models import (
     Alert,
     AlertEvent,
+    AuditLog,
     DetectionRule,
     DetectionRuleVersion,
     DetectionRun,
     Event,
+    Incident,
+    IncidentAlert,
     User,
 )
 from app.schemas.detection import (
+    AlertActivityOut,
     AlertDetailOut,
     AlertOut,
     AlertPage,
     AlertStatus,
-    AlertStatusUpdate,
+    AlertUpdate,
+    AssignableUser,
     DetectionRunCreate,
     DetectionRunOut,
     EvidenceEventOut,
     EvidencePage,
+    HistoryEntryOut,
+    IncidentRef,
+    NoteCreate,
+    NoteOut,
     RuleDetailOut,
     RuleOut,
     RuleUpdate,
@@ -39,6 +48,9 @@ from app.schemas.detection import (
     Severity,
 )
 from app.services import audit
+from app.services.notes import add_note, list_notes, note_out
+from app.services.people import assignee as validate_assignee
+from app.services.people import can_be_assigned, usernames
 
 router = APIRouter(tags=["detection"])
 RuleReader = Annotated[AuthContext, Depends(require(Permission.RULES_READ))]
@@ -230,16 +242,19 @@ def list_runs(
 # --- Alerts ---------------------------------------------------------------------------------
 
 
-def _alert_out(a: Alert) -> AlertOut:
-    out = AlertOut.model_validate(a)
-    out.rule_name = RULES[a.rule_id].name if a.rule_id in RULES else a.rule_id
+def alerts_out(db: Session, rows: list[Alert]) -> list[AlertOut]:
+    names = usernames(db, (a.assigned_to for a in rows))
+    out = []
+    for a in rows:
+        item = AlertOut.model_validate(a)
+        item.rule_name = RULES[a.rule_id].name if a.rule_id in RULES else a.rule_id
+        item.assignee = names.get(a.assigned_to) if a.assigned_to else None
+        out.append(item)
     return out
 
 
-@router.get("/alerts", response_model=AlertPage)
-def list_alerts(
-    _: AlertReader,
-    db: DbSession,
+def alert_filters(
+    auth: AlertReader,
     status_filter: Annotated[AlertStatus | None, Query(alias="status")] = None,
     severity: Severity | None = None,
     rule_id: Annotated[str | None, Query(max_length=32)] = None,
@@ -247,18 +262,23 @@ def list_alerts(
     q: Annotated[
         str | None, Query(min_length=2, max_length=200, description="Substring of the alert title")
     ] = None,
+    assigned_to: Annotated[
+        str | None,
+        Query(
+            max_length=12, pattern=r"^(me|none|[1-9][0-9]*)$", description="me, none or a user id"
+        ),
+    ] = None,
     since: datetime | None = None,
     until: datetime | None = None,
-    before_id: Annotated[int | None, Query(gt=0)] = None,
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
-) -> AlertPage:
-    stmt = select(Alert).order_by(Alert.id.desc())
+) -> list[Any]:
+    """Shared by the alert queue and the alert export."""
+    conds: list[Any] = []
     if status_filter:
-        stmt = stmt.where(Alert.status == status_filter)
+        conds.append(Alert.status == status_filter)
     if severity:
-        stmt = stmt.where(Alert.severity == severity)
+        conds.append(Alert.severity == severity)
     if rule_id:
-        stmt = stmt.where(Alert.rule_id == rule_id)
+        conds.append(Alert.rule_id == rule_id)
     if source_ip:
         try:
             ip = str(ipaddress.ip_address(source_ip))
@@ -266,22 +286,41 @@ def list_alerts(
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_CONTENT, "source_ip must be a valid IP address"
             ) from exc
-        stmt = stmt.where(Alert.source_ip == ip)
+        conds.append(Alert.source_ip == ip)
     if q:
         escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        stmt = stmt.where(Alert.title.ilike(f"%{escaped}%", escape="\\"))
+        conds.append(Alert.title.ilike(f"%{escaped}%", escape="\\"))
+    if assigned_to == "me":
+        conds.append(Alert.assigned_to == auth.user.id)
+    elif assigned_to == "none":
+        conds.append(Alert.assigned_to.is_(None))
+    elif assigned_to:
+        conds.append(Alert.assigned_to == int(assigned_to))
     if since:
-        stmt = stmt.where(Alert.last_seen >= since)
+        conds.append(Alert.last_seen >= since)
     if until:
-        stmt = stmt.where(Alert.first_seen < until)
+        conds.append(Alert.first_seen < until)
+    return conds
+
+
+AlertFilters = Annotated[list[Any], Depends(alert_filters)]
+
+
+@router.get("/alerts", response_model=AlertPage)
+def list_alerts(
+    _: AlertReader,
+    db: DbSession,
+    conds: AlertFilters,
+    before_id: Annotated[int | None, Query(gt=0)] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> AlertPage:
+    stmt = select(Alert).where(*conds).order_by(Alert.id.desc())
     if before_id:
         stmt = stmt.where(Alert.id < before_id)
     rows = list(db.scalars(stmt.limit(limit + 1)).all())
     has_more = len(rows) > limit
     rows = rows[:limit]
-    return AlertPage(
-        items=[_alert_out(a) for a in rows], next_before_id=rows[-1].id if has_more else None
-    )
+    return AlertPage(items=alerts_out(db, rows), next_before_id=rows[-1].id if has_more else None)
 
 
 def _get_alert(db: Session, alert_id: int) -> Alert:
@@ -296,6 +335,7 @@ def get_alert(alert_id: int, _: AlertReader, db: DbSession) -> AlertDetailOut:
     a = _get_alert(db, alert_id)
     out = AlertDetailOut.model_validate(a)
     out.rule_name = RULES[a.rule_id].name if a.rule_id in RULES else a.rule_id
+    out.assignee = usernames(db, [a.assigned_to]).get(a.assigned_to) if a.assigned_to else None
     out.recommended_steps = RULES[a.rule_id].recommended_steps if a.rule_id in RULES else []
     out.evidence_count = (
         db.scalar(select(func.count()).select_from(AlertEvent).where(AlertEvent.alert_id == a.id))
@@ -358,12 +398,13 @@ def get_alert_evidence(
 
 
 @router.patch("/alerts/{alert_id}", response_model=AlertDetailOut)
-def update_alert_status(
-    alert_id: int, body: AlertStatusUpdate, auth: AlertTriager, request: Request, db: DbSession
+def update_alert(
+    alert_id: int, body: AlertUpdate, auth: AlertTriager, request: Request, db: DbSession
 ) -> AlertDetailOut:
-    """Change an alert's triage status. Every change is recorded in the audit trail."""
+    """Change an alert's status and/or assignee. Every change is recorded in the audit trail."""
     a = _get_alert(db, alert_id)
-    if a.status != body.status:
+    changed = False
+    if body.status is not None and a.status != body.status:
         previous = a.status
         a.status = body.status
         audit.record(
@@ -375,6 +416,95 @@ def update_alert_status(
             request=request,
             details={"from": previous, "to": body.status, "note": body.note, "rule_id": a.rule_id},
         )
+        changed = True
+    if "assigned_to" in body.model_fields_set and a.assigned_to != body.assigned_to:
+        new_owner = validate_assignee(db, body.assigned_to)
+        names = usernames(db, [a.assigned_to])
+        audit.record(
+            db,
+            "alert.assign",
+            actor=auth.user,
+            target_type="alert",
+            target_id=a.id,
+            request=request,
+            details={
+                "from": names.get(a.assigned_to) if a.assigned_to else None,
+                "to": new_owner.username if new_owner else None,
+                "note": body.note,
+            },
+        )
+        a.assigned_to = body.assigned_to
+        changed = True
+    if changed:
         db.commit()
         db.refresh(a)
     return get_alert(alert_id, auth, db)
+
+
+@router.get("/alerts/{alert_id}/activity", response_model=AlertActivityOut)
+def get_alert_activity(alert_id: int, _: AlertReader, db: DbSession) -> AlertActivityOut:
+    """Notes, the alert's change history (from the audit trail) and incidents that include it."""
+    a = _get_alert(db, alert_id)
+    history = db.scalars(
+        select(AuditLog)
+        .where(AuditLog.target_type == "alert", AuditLog.target_id == str(a.id))
+        .order_by(AuditLog.id)
+        .limit(1000)
+    ).all()
+    incidents = db.scalars(
+        select(Incident)
+        .join(IncidentAlert, IncidentAlert.incident_id == Incident.id)
+        .where(IncidentAlert.alert_id == a.id)
+        .order_by(Incident.id)
+    ).all()
+    return AlertActivityOut(
+        notes=list_notes(db, alert_id=a.id),
+        history=[
+            HistoryEntryOut(
+                id=h.id,
+                occurred_at=h.occurred_at,
+                actor=h.actor_username,
+                action=h.action,
+                details=h.details,
+            )
+            for h in history
+        ],
+        incidents=[
+            IncidentRef(id=i.id, title=i.title, status=i.status, severity=i.severity)  # type: ignore[arg-type]
+            for i in incidents
+        ],
+    )
+
+
+@router.post(
+    "/alerts/{alert_id}/notes", response_model=NoteOut, status_code=status.HTTP_201_CREATED
+)
+def create_alert_note(
+    alert_id: int, body: NoteCreate, auth: AlertTriager, request: Request, db: DbSession
+) -> NoteOut:
+    a = _get_alert(db, alert_id)
+    note = add_note(db, body, auth.user, alert_id=a.id)
+    audit.record(
+        db,
+        "alert.note",
+        actor=auth.user,
+        target_type="alert",
+        target_id=a.id,
+        request=request,
+        details={"note_id": note.id, "kind": note.kind},
+    )
+    db.commit()
+    return note_out(note, {auth.user.id: auth.user.username})
+
+
+@router.get("/assignees", response_model=list[AssignableUser])
+def list_assignees(_: AlertTriager, db: DbSession) -> list[AssignableUser]:
+    """Active users who may own alerts and incidents."""
+    users = db.scalars(
+        select(User).where(User.is_active.is_(True)).order_by(User.username).limit(1000)
+    ).all()
+    return [
+        AssignableUser(id=u.id, username=u.username, role=u.role.name)
+        for u in users
+        if can_be_assigned(u)
+    ]

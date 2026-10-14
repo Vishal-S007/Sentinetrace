@@ -68,6 +68,8 @@ export function makeAlert(over: Partial<Alert> = {}): Alert {
     first_seen: '2026-10-01T01:14:00Z',
     last_seen: '2026-10-01T01:14:25Z',
     event_count: 6,
+    assigned_to: null,
+    assignee: null,
     created_at: '2026-10-13T10:00:00Z',
     updated_at: '2026-10-13T10:00:00Z',
     ...over,
@@ -144,6 +146,68 @@ export function makeDashboard(over: Partial<Dashboard> = {}): Dashboard {
     recent_jobs: [{ id: 3, status: 'completed', filename: 'web_access.log', source_name: 'web', parsed_count: 6331, rejected_count: 0, created_at: '2026-10-13T10:00:00Z' }],
     recent_high_alerts: [makeAlert({ id: 38, title: 'Potential brute force from 203.0.113.60 (8 accounts)' })],
     data_range: { first_event: '2026-10-01T00:00:00Z', last_event: '2026-10-01T05:00:00Z' },
+    ...over,
+  }
+}
+
+import type { IncidentDetail, RuleDetail } from '../api/client'
+
+export function makeIncident(over: Partial<IncidentDetail> = {}): IncidentDetail {
+  return {
+    id: 5,
+    title: 'SQL injection campaign from 203.0.113.10',
+    summary: 'Scanner followed by injection attempts.',
+    status: 'open',
+    severity: 'high',
+    assigned_to: null,
+    assignee: null,
+    created_by: 'analystuser',
+    created_at: '2026-10-13T10:00:00Z',
+    updated_at: '2026-10-13T10:05:00Z',
+    closed_at: null,
+    alert_count: 1,
+    alerts: [makeAlert()],
+    notes: [],
+    timeline: [
+      { at: '2026-10-01T01:14:00Z', kind: 'observed', title: 'First observed: SQL injection indicators from 203.0.113.10', detail: null, actor: null, alert_id: 11, event_id: null },
+      { at: '2026-10-13T10:00:00Z', kind: 'change', title: 'Incident created', detail: null, actor: 'analystuser', alert_id: null, event_id: null },
+      { at: '2026-10-13T10:05:00Z', kind: 'note', title: 'Action taken', detail: 'Blocked <b>IP</b> at WAF', actor: 'analystuser', alert_id: null, event_id: 501 },
+    ],
+    ...over,
+  }
+}
+
+export const assignees = [
+  { id: 2, username: 'ana', role: 'analyst' as const },
+  { id: 3, username: 'root', role: 'admin' as const },
+]
+
+export function makeRule(over: Partial<RuleDetail> = {}): RuleDetail {
+  return {
+    rule_id: 'ST-AUTH-001',
+    name: 'Repeated authentication failures',
+    category: 'auth',
+    description: 'Many failed logins for one account from one IP.',
+    severity: 'medium',
+    default_severity: 'medium',
+    enabled: true,
+    version: 2,
+    config: { threshold: 5, window_seconds: 300 },
+    default_config: { threshold: 5, window_seconds: 300 },
+    config_schema: {
+      properties: {
+        threshold: { type: 'integer', title: 'Threshold', description: 'Failures within the window', minimum: 2, maximum: 10000 },
+        window_seconds: { type: 'integer', title: 'Window Seconds', minimum: 10, maximum: 86400 },
+      },
+    },
+    recommended_steps: ['Check whether any login succeeded.'],
+    updated_at: '2026-10-13T09:00:00Z',
+    updated_by: 'root',
+    open_alerts: 3,
+    versions: [
+      { version: 2, enabled: true, severity: 'medium', config: { threshold: 5, window_seconds: 300 }, note: 'tuned', changed_by: 'root', changed_at: '2026-10-13T09:00:00Z' },
+      { version: 1, enabled: true, severity: 'medium', config: { threshold: 8, window_seconds: 300 }, note: '', changed_by: null, changed_at: '2026-10-12T09:00:00Z' },
+    ],
     ...over,
   }
 }

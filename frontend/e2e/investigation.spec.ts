@@ -41,7 +41,7 @@ test.beforeAll(() => {
   if (!ADMIN_PASSWORD) throw new Error('Set E2E_ADMIN_PASSWORD (and E2E_ADMIN_USER) for the E2E run')
 })
 
-test('investigate an alert: import, overview, queue, evidence, triage, event explorer', async ({ page }) => {
+test('investigate an alert: import, overview, queue, evidence, triage, explorer, incident, report, export', async ({ page }) => {
   const now = Date.now()
   const runId = now.toString(36)
   const ip = runIp(Math.floor(now / 1000))
@@ -105,4 +105,45 @@ test('investigate an alert: import, overview, queue, evidence, triage, event exp
   const panel = page.getByRole('complementary', { name: /^Event \d+$/ })
   await expect(panel.getByText(`inv-${runId}.log`, { exact: false })).toBeVisible()
   await expect(panel.getByRole('link', { name: new RegExp(`SQL injection indicators from ${ip.replaceAll('.', '\\.')}`) })).toBeVisible()
+
+  // Group it into an incident from the alert page, record an action, and contain it.
+  await page.goto(`/alerts?source_ip=${ip}`)
+  await page.getByRole('link', { name: `SQL injection indicators from ${ip}` }).click()
+  await expect(page.getByRole('heading', { name: `SQL injection indicators from ${ip}` })).toBeVisible()
+  const incidents = page.getByRole('region', { name: 'Incidents' })
+  const picker = incidents.getByLabel('Add to incident')
+  await expect(picker).toBeEnabled()
+  await picker.selectOption('new')
+  await incidents.getByRole('button', { name: 'Add' }).click()
+  await expect(page.getByRole('heading', { name: `SQL injection indicators from ${ip}` })).toBeVisible()
+  await expect(page).toHaveURL(/\/incidents\/\d+$/)
+  const incidentId = page.url().split('/').pop()
+  const timeline = page.getByRole('region', { name: 'Timeline' })
+  await expect(timeline.getByText('Incident created')).toBeVisible()
+  await page.getByLabel('Entry type').selectOption('action')
+  await page.getByLabel('Note text').fill(`Blocked ${ip} at the edge (${runId})`)
+  await page.getByRole('button', { name: 'Add to record' }).click()
+  await expect(timeline.getByText(`Blocked ${ip} at the edge (${runId})`)).toBeVisible()
+  const manage = page.getByRole('form', { name: 'Manage incident' })
+  await manage.getByLabel('Status').selectOption('contained')
+  await manage.getByRole('button', { name: 'Save changes' }).click()
+  await expect(timeline.getByText('Status: open → contained')).toBeVisible()
+
+  // The Markdown report contains the alert, its evidence and the action taken.
+  const reportHref = await page.getByRole('link', { name: 'Download Markdown' }).getAttribute('href')
+  const report = await page.evaluate(async (href) => (await fetch(href!)).text(), reportHref)
+  expect(report).toContain(`# Incident #${incidentId}: SQL injection indicators from ${ip}`)
+  expect(report).toContain('| Status | contained |')
+  expect(report).toContain(`union%20select%20username`)
+  expect(report).toContain(`Blocked ${ip} at the edge (${runId})`)
+
+  // The alert export for this IP holds exactly this run's alerts.
+  await page.goto(`/alerts?source_ip=${ip}`)
+  const csvHref = await page.getByRole('link', { name: 'CSV' }).getAttribute('href')
+  const csv = await page.evaluate(async (href) => (await fetch(href!)).text(), csvHref)
+  const rows = csv.trim().split('\n')
+  expect(rows[0]).toContain('id,rule_id,rule_name,title,severity,status')
+  expect(rows.slice(1).every((r) => r.includes(ip))).toBe(true)
+  expect(csv).toContain(`SQL injection indicators from ${ip}`)
 })
+

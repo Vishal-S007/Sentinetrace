@@ -76,6 +76,8 @@ class AlertOut(BaseModel):
     first_seen: datetime
     last_seen: datetime
     event_count: int
+    assigned_to: int | None = None
+    assignee: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -95,7 +97,6 @@ class AlertDetailOut(AlertOut):
     evidence_truncated: bool
     evidence_count: int = 0
     details: dict[str, Any]
-    assigned_to: int | None
 
 
 class AlertPage(BaseModel):
@@ -162,8 +163,72 @@ class DetectionRunOut(BaseModel):
     finished_at: datetime | None
 
 
-class AlertStatusUpdate(BaseModel):
+class AlertUpdate(BaseModel):
+    """Change status and/or assignee. `assigned_to: null` clears the assignment."""
+
     model_config = ConfigDict(extra="forbid")
 
-    status: AlertStatus
+    status: AlertStatus | None = None
+    assigned_to: int | None = None
     note: str = Field(default="", max_length=1000)
+
+    @model_validator(mode="after")
+    def something_changes(self) -> "AlertUpdate":
+        if self.status is None and "assigned_to" not in self.model_fields_set:
+            raise ValueError("provide status and/or assigned_to")
+        return self
+
+
+NoteKind = Literal["note", "action", "evidence"]
+
+
+class NoteCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: NoteKind = "note"
+    body: str = Field(min_length=1, max_length=5000)
+    event_id: int | None = Field(default=None, gt=0)
+
+    @field_validator("body")
+    @classmethod
+    def not_blank(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("body must not be blank")
+        return v
+
+
+class NoteOut(BaseModel):
+    id: int
+    kind: NoteKind
+    body: str
+    event_id: int | None
+    author: str
+    created_at: datetime
+
+
+class HistoryEntryOut(BaseModel):
+    id: int
+    occurred_at: datetime
+    actor: str | None
+    action: str
+    details: dict[str, Any]
+
+
+class IncidentRef(BaseModel):
+    id: int
+    title: str
+    status: str
+    severity: Severity
+
+
+class AlertActivityOut(BaseModel):
+    notes: list[NoteOut]
+    history: list[HistoryEntryOut]
+    incidents: list[IncidentRef]
+
+
+class AssignableUser(BaseModel):
+    id: int
+    username: str
+    role: str

@@ -3,6 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom'
 
 import { api, ApiError, type EventDetail, type EventFilters, type EventItem } from '../api/client'
 import { SeverityBadge } from '../components/badges'
+import { useAuth } from '../auth/AuthContext'
+import { ExportLinks } from '../components/investigation'
 import { Button, Empty, ErrorBanner, Field, Loading, PageHeader, Select, TextInput } from '../components/ui'
 import { formatCount, formatDateTime } from '../lib/format'
 
@@ -119,6 +121,7 @@ function EventDetailPanel({ id, onClose }: { id: number; onClose: () => void }) 
 }
 
 export function EventsPage() {
+  const { can } = useAuth()
   const [params, setParams] = useSearchParams()
   const filters = useMemo(() => {
     const f: EventFilters = {}
@@ -186,7 +189,11 @@ export function EventsPage() {
 
   return (
     <section>
-      <PageHeader title="Event explorer" subtitle="Search and filter normalized events. Filtering and paging run on the server." />
+      <PageHeader
+        title="Event explorer"
+        subtitle="Search and filter normalized events. Filtering and paging run on the server."
+        actions={can('reports:export') ? <ExportLinks kind="events" filters={filters} /> : undefined}
+      />
 
       <form onSubmit={apply} aria-label="Event filters" className="mb-4 rounded-md border border-line bg-panel p-4">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

@@ -8,6 +8,11 @@ import { AccountPage } from './pages/AccountPage'
 import { AlertDetailPage } from './pages/AlertDetailPage'
 import { AlertsPage } from './pages/AlertsPage'
 import { EventsPage } from './pages/EventsPage'
+import { IncidentDetailPage } from './pages/IncidentDetailPage'
+import { IncidentNewPage } from './pages/IncidentNewPage'
+import { IncidentsPage } from './pages/IncidentsPage'
+import { RuleDetailPage } from './pages/RuleDetailPage'
+import { RulesPage } from './pages/RulesPage'
 import { AuditPage } from './pages/AuditPage'
 import { JobDetailPage } from './pages/JobDetailPage'
 import { JobsPage } from './pages/JobsPage'
@@ -23,7 +28,9 @@ const DashboardPage = lazy(() => import('./pages/DashboardPage').then((m) => ({ 
 const NAV: { to: string; label: string; permission?: string }[] = [
   { to: '/dashboard', label: 'Overview', permission: 'events:read' },
   { to: '/alerts', label: 'Alerts', permission: 'alerts:read' },
+  { to: '/incidents', label: 'Incidents', permission: 'incidents:read' },
   { to: '/events', label: 'Events', permission: 'events:read' },
+  { to: '/rules', label: 'Detection rules', permission: 'rules:read' },
   { to: '/sources', label: 'Log sources', permission: 'events:read' },
   { to: '/jobs', label: 'Ingestion jobs', permission: 'events:read' },
   { to: '/status', label: 'System status' },
@@ -124,6 +131,46 @@ function Shell() {
             element={
               <RequirePermission permission="events:read">
                 <EventsPage key={location.search} />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/incidents"
+            element={
+              <RequirePermission permission="incidents:read">
+                <IncidentsPage key={location.search} />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/incidents/new"
+            element={
+              <RequirePermission permission="incidents:manage">
+                <IncidentNewPage key={location.search} />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/incidents/:id"
+            element={
+              <RequirePermission permission="incidents:read">
+                <IncidentDetailPage key={location.pathname} />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/rules"
+            element={
+              <RequirePermission permission="rules:read">
+                <RulesPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/rules/:id"
+            element={
+              <RequirePermission permission="rules:read">
+                <RuleDetailPage key={location.pathname} />
               </RequirePermission>
             }
           />

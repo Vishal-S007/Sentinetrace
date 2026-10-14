@@ -2,17 +2,25 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 
 import { api, ApiError, type AuditEntry } from '../api/client'
 import { formatDateTime } from '../lib/format'
-import { Button, Empty, ErrorBanner, Field, Loading, PageHeader, TextInput } from '../components/ui'
+import { useAuth } from '../auth/AuthContext'
+import { ExportLinks } from '../components/investigation'
+import { Button, Empty, ErrorBanner, Field, Loading, PageHeader, Select, TextInput } from '../components/ui'
 
 const PAGE_SIZE = 50
 
 interface Filters {
   action: string
   actor: string
+  target_type: string
+  target_id: string
 }
 
+const EMPTY: Filters = { action: '', actor: '', target_type: '', target_id: '' }
+const TARGET_TYPES = ['alert', 'incident', 'detection_rule', 'detection_run', 'user', 'log_source', 'imported_file', 'ingestion_job', 'export']
+
 export function AuditPage() {
-  const [filters, setFilters] = useState<Filters>({ action: '', actor: '' })
+  const { can } = useAuth()
+  const [filters, setFilters] = useState<Filters>(EMPTY)
   const [draft, setDraft] = useState<Filters>(filters)
   const [items, setItems] = useState<AuditEntry[]>([])
   const [nextBefore, setNextBefore] = useState<number | null>(null)
@@ -21,7 +29,7 @@ export function AuditPage() {
   const [error, setError] = useState<string | null>(null)
 
   const fetchPage = useCallback(
-    (before?: number) => api.audit({ action: filters.action, actor: filters.actor, before_id: before, limit: PAGE_SIZE }),
+    (before?: number) => api.audit({ ...filters, before_id: before, limit: PAGE_SIZE }),
     [filters],
   )
 
@@ -62,12 +70,25 @@ export function AuditPage() {
     e.preventDefault()
     setStatus('loading')
     setError(null)
-    setFilters({ action: draft.action.trim(), actor: draft.actor.trim() })
+    setFilters({
+      action: draft.action.trim(),
+      actor: draft.actor.trim(),
+      target_type: draft.target_type,
+      target_id: draft.target_id.trim(),
+    })
   }
 
   return (
     <section>
-      <PageHeader title="Audit log" subtitle="Append-only record of security-relevant actions. Entries cannot be edited or deleted." />
+      <PageHeader
+        title="Audit log"
+        subtitle="Append-only record of security-relevant actions. Entries cannot be edited or deleted."
+        actions={
+          can('reports:export') ? (
+            <ExportLinks kind="audit" filters={{ action: filters.action, actor: filters.actor, target_type: filters.target_type, target_id: filters.target_id }} />
+          ) : undefined
+        }
+      />
 
       <form onSubmit={applyFilters} aria-label="Filter audit log" className="mb-4 flex flex-wrap items-end gap-3">
         <div className="w-56">
@@ -78,6 +99,23 @@ export function AuditPage() {
         <div className="w-48">
           <Field label="Actor">
             <TextInput placeholder="username" value={draft.actor} onChange={(e) => setDraft({ ...draft, actor: e.target.value })} />
+          </Field>
+        </div>
+        <div className="w-40">
+          <Field label="Target type">
+            <Select value={draft.target_type} onChange={(e) => setDraft({ ...draft, target_type: e.target.value })}>
+              <option value="">Any</option>
+              {TARGET_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t.replaceAll('_', ' ')}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+        <div className="w-32">
+          <Field label="Target ID">
+            <TextInput value={draft.target_id} onChange={(e) => setDraft({ ...draft, target_id: e.target.value })} />
           </Field>
         </div>
         <Button type="submit">Apply</Button>

@@ -15,7 +15,9 @@ from app.api.routes import (
     dashboard,
     detection,
     events,
+    exports,
     health,
+    incidents,
     jobs,
     sources,
     users,
@@ -24,6 +26,29 @@ from app.core.config import Settings, get_settings
 from app.core.limits import BodySizeLimitMiddleware
 
 logger = logging.getLogger("sentineltrace")
+
+QUIET_PATHS = ("/api/health", "/api/ready")
+
+
+class QuietHealthChecks(logging.Filter):
+    """Drop successful health/readiness checks from the access log.
+
+    The container health check calls /api/health every few seconds; logging each call
+    buries useful lines. Failed checks (non-2xx) are still logged.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if isinstance(args, tuple) and len(args) >= 5:
+            path, status_code = str(args[2]).split("?", 1)[0], args[4]
+            if path in QUIET_PATHS and isinstance(status_code, int) and status_code < 300:
+                return False
+        return True
+
+
+_access_logger = logging.getLogger("uvicorn.access")
+if not any(isinstance(f, QuietHealthChecks) for f in _access_logger.filters):
+    _access_logger.addFilter(QuietHealthChecks())
 
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
@@ -95,12 +120,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router, prefix="/api")
     app.include_router(auth.router, prefix="/api")
     app.include_router(users.router, prefix="/api")
+    # Exports first: their paths (/alerts/export, ...) must win over /alerts/{alert_id}.
+    app.include_router(exports.router, prefix="/api")
     app.include_router(audit.router, prefix="/api")
     app.include_router(sources.router, prefix="/api")
     app.include_router(jobs.router, prefix="/api")
     app.include_router(detection.router, prefix="/api")
     app.include_router(dashboard.router, prefix="/api")
     app.include_router(events.router, prefix="/api")
+    app.include_router(incidents.router, prefix="/api")
     return app
 
 

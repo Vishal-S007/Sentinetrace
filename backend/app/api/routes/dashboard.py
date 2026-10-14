@@ -8,7 +8,7 @@ from sqlalchemy import and_, case, func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import AuthContext, DbSession, require
-from app.api.routes.detection import _alert_out
+from app.api.routes.detection import alerts_out
 from app.core.permissions import Permission
 from app.detection.registry import RULES
 from app.models import Alert, Event, ImportedFile, IngestionJob, LogSource
@@ -193,7 +193,7 @@ def compute_dashboard(db: Session, rng: str, now: datetime | None = None) -> dic
             }
             for j, fname, sname in jobs
         ],
-        "recent_high_alerts": [_alert_out(a) for a in recent_high],
+        "recent_high_alerts": alerts_out(db, list(recent_high)),
         "data_range": {"first_event": first, "last_event": last},
     }
 

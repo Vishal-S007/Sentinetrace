@@ -1,10 +1,23 @@
-import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useCallback, useEffect, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 
-import { api, ApiError, type AlertDetail, type AlertStatus, type EvidenceItem, type EvidencePage } from '../api/client'
+import {
+  api,
+  ApiError,
+  type AlertActivity,
+  type AlertDetail,
+  type AlertStatus,
+  type EvidenceItem,
+  type EvidencePage,
+  type HistoryEntry,
+  type Incident,
+} from '../api/client'
 import { useAuth } from '../auth/AuthContext'
-import { AlertStatusBadge, ConfidenceLabel, SeverityBadge } from '../components/badges'
-import { Button, ErrorBanner, Loading, SuccessBanner, TextInput } from '../components/ui'
+import { AlertStatusBadge, ConfidenceLabel, IncidentStatusBadge, SeverityBadge } from '../components/badges'
+import { AssigneeSelect, NoteComposer, NoteList } from '../components/investigation'
+import { errorMessage } from '../lib/errors'
+import { useAssignees } from '../lib/useAssignees'
+import { Button, ErrorBanner, Loading, Select, SuccessBanner, TextInput } from '../components/ui'
 import { formatCount, formatDateTime } from '../lib/format'
 import { ALERT_STATUSES, STATUS_LABEL } from '../lib/severity'
 
@@ -36,6 +49,7 @@ function DetailValue({ value }: { value: unknown }) {
 }
 
 function StatusControl({ alert, onChanged }: { alert: AlertDetail; onChanged: (a: AlertDetail) => void }) {
+  const assignees = useAssignees(true)
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState<AlertStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -56,9 +70,31 @@ function StatusControl({ alert, onChanged }: { alert: AlertDetail; onChanged: (a
     }
   }
 
+  async function assign(id: number | null) {
+    setError(null)
+    setDone(null)
+    try {
+      const updated = await api.assignAlert(alert.id, id)
+      onChanged(updated)
+      setDone(updated.assignee ? `Assigned to ${updated.assignee}.` : 'Owner cleared.')
+    } catch (err) {
+      setError(msg(err))
+    }
+  }
+
   return (
     <section aria-label="Triage" className="rounded-md border border-line bg-panel p-4">
       <h2 className="mb-2 text-sm font-semibold">Triage</h2>
+      <div className="mb-3">
+        <span className="mb-1 block text-xs text-ink-dim">Owner</span>
+        <AssigneeSelect
+          value={alert.assigned_to}
+          currentName={alert.assignee}
+          assignees={assignees}
+          onChange={(id) => void assign(id)}
+          label="Alert owner"
+        />
+      </div>
       <div className="mb-2 flex flex-wrap gap-2">
         {ALERT_STATUSES.filter((s) => s !== alert.status).map((s) => (
           <Button key={s} onClick={() => void change(s)} disabled={busy !== null} variant={s === 'resolved' ? 'primary' : 'secondary'}>
@@ -165,6 +201,160 @@ function Evidence({ alert }: { alert: AlertDetail }) {
   )
 }
 
+const ACTION_LABEL: Record<string, string> = {
+  'alert.status_change': 'Status changed',
+  'alert.assign': 'Owner changed',
+  'alert.note': 'Added a note',
+}
+
+function describe(h: HistoryEntry): string {
+  const d = h.details as { from?: string | null; to?: string | null; kind?: string }
+  if (h.action === 'alert.status_change') {
+    const label = (v?: string | null) => (v ? (STATUS_LABEL[v as AlertStatus] ?? v) : 'none')
+    return `${label(d.from)} → ${label(d.to)}`
+  }
+  if (h.action === 'alert.assign') return `${d.from ?? 'unassigned'} → ${d.to ?? 'unassigned'}`
+  if (h.action === 'alert.note') return d.kind === 'action' ? 'action taken' : d.kind === 'evidence' ? 'evidence reference' : 'note'
+  return ''
+}
+
+function AddToIncident({ alert }: { alert: AlertDetail }) {
+  const navigate = useNavigate()
+  const [open, setOpen] = useState<Incident[] | null>(null)
+  const [choice, setChoice] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+    api
+      .incidents({ open_only: 'true' }, undefined, 100)
+      .then((p) => active && setOpen(p.items))
+      .catch(() => active && setOpen([]))
+    return () => {
+      active = false
+    }
+  }, [])
+
+  async function add() {
+    setBusy(true)
+    setError(null)
+    try {
+      if (choice === 'new') {
+        const inc = await api.createIncident({ title: alert.title, alert_ids: [alert.id] })
+        navigate(`/incidents/${inc.id}`)
+      } else if (choice) {
+        await api.linkAlerts(Number(choice), [alert.id])
+        navigate(`/incidents/${choice}`)
+      }
+    } catch (err) {
+      setError(errorMessage(err))
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mt-3 space-y-2">
+      <div className="flex gap-2">
+        <Select aria-label="Add to incident" value={choice} onChange={(e) => setChoice(e.target.value)} disabled={open === null}>
+          <option value="">Add to incident…</option>
+          <option value="new">New incident from this alert</option>
+          {(open ?? []).map((i) => (
+            <option key={i.id} value={i.id}>
+              #{i.id} {i.title}
+            </option>
+          ))}
+        </Select>
+        <Button onClick={() => void add()} disabled={!choice || busy}>
+          {busy ? 'Adding…' : 'Add'}
+        </Button>
+      </div>
+      {error && <ErrorBanner message={error} />}
+    </div>
+  )
+}
+
+function Activity({ alert, refreshKey }: { alert: AlertDetail; refreshKey: string }) {
+  const { can } = useAuth()
+  const [activity, setActivity] = useState<AlertActivity | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = useCallback(() => {
+    return api
+      .alertActivity(alert.id)
+      .then(setActivity)
+      .catch((err: unknown) => setError(msg(err)))
+  }, [alert.id])
+
+  useEffect(() => {
+    void load()
+  }, [load, refreshKey])
+
+  return (
+    <>
+      <section aria-label="Investigation notes" className="rounded-md border border-line bg-panel p-4">
+        <h2 className="mb-3 text-sm font-semibold">Investigation notes</h2>
+        {error && <ErrorBanner message={`Could not load activity: ${error}`} />}
+        {!activity && !error && <Loading label="Loading notes…" />}
+        {activity && <NoteList notes={activity.notes} />}
+        {can('alerts:triage') && (
+          <div className="mt-4 border-t border-line pt-4">
+            <NoteComposer
+              onSubmit={async (body) => {
+                await api.addAlertNote(alert.id, body)
+                await load()
+              }}
+            />
+          </div>
+        )}
+      </section>
+      {activity && (
+        <section aria-label="Incidents" className="rounded-md border border-line bg-panel p-4">
+          <h2 className="mb-2 text-sm font-semibold">Incidents</h2>
+          {activity.incidents.length === 0 ? (
+            <p className="text-sm text-ink-dim">Not part of an incident.</p>
+          ) : (
+            <ul className="space-y-1.5 text-sm">
+              {activity.incidents.map((i) => (
+                <li key={i.id} className="flex items-center justify-between gap-2">
+                  <Link to={`/incidents/${i.id}`} className="truncate text-accent hover:underline">
+                    #{i.id} {i.title}
+                  </Link>
+                  <IncidentStatusBadge status={i.status} />
+                </li>
+              ))}
+            </ul>
+          )}
+          {can('incidents:manage') && <AddToIncident alert={alert} />}
+        </section>
+      )}
+      {activity && (
+        <section aria-label="History" className="rounded-md border border-line bg-panel p-4">
+          <h2 className="mb-2 text-sm font-semibold">History</h2>
+          {activity.history.length === 0 ? (
+            <p className="text-sm text-ink-dim">No changes yet.</p>
+          ) : (
+            <ol className="space-y-2 text-sm">
+              {activity.history.map((h) => (
+                <li key={h.id}>
+                  <p>
+                    <span className="font-medium">{ACTION_LABEL[h.action] ?? h.action}</span>{' '}
+                    <span className="text-ink-dim">{describe(h)}</span>
+                  </p>
+                  <p className="text-xs text-ink-dim">
+                    {h.actor ?? 'system'} · {formatDateTime(h.occurred_at)}
+                    {typeof h.details.note === 'string' && h.details.note ? ` · “${h.details.note}”` : ''}
+                  </p>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+      )}
+    </>
+  )
+}
+
 export function AlertDetailPage() {
   const { id } = useParams()
   const alertId = Number(id)
@@ -201,7 +391,11 @@ export function AlertDetailPage() {
         <div className="min-w-0">
           <h1 className="text-xl font-semibold">{alert.title}</h1>
           <p className="font-mono text-xs text-ink-dim">
-            Alert #{alert.id} · {alert.rule_id} v{alert.rule_version} · {alert.rule_name}
+            Alert #{alert.id} ·{' '}
+            <Link to={`/rules/${alert.rule_id}`} className="hover:text-accent">
+              {alert.rule_id} v{alert.rule_version}
+            </Link>{' '}
+            · {alert.rule_name}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -211,8 +405,8 @@ export function AlertDetailPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
-        <div className="space-y-4">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="min-w-0 space-y-4">
           <section aria-label="What was observed" className="rounded-md border border-line bg-panel p-4">
             <h2 className="mb-2 text-sm font-semibold">What was observed</h2>
             <p className="text-sm leading-relaxed">{alert.reason}</p>
@@ -232,8 +426,9 @@ export function AlertDetailPage() {
           <Evidence alert={alert} />
         </div>
 
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           {can('alerts:triage') && <StatusControl alert={alert} onChanged={setAlert} />}
+          <Activity alert={alert} refreshKey={`${alert.status}|${alert.assigned_to}`} />
           <section aria-label="Facts" className="rounded-md border border-line bg-panel p-4">
             <dl className="grid grid-cols-[6.5rem_1fr] gap-x-2 gap-y-1.5 text-sm">
               <dt className="text-ink-dim">First seen</dt>
@@ -242,6 +437,8 @@ export function AlertDetailPage() {
               <dd>{formatDateTime(alert.last_seen)}</dd>
               <dt className="text-ink-dim">Events</dt>
               <dd className="tabular-nums">{formatCount(alert.event_count)}</dd>
+              <dt className="text-ink-dim">Owner</dt>
+              <dd>{alert.assignee ?? <span className="text-ink-dim">unassigned</span>}</dd>
               <dt className="text-ink-dim">Rule window</dt>
               <dd>{humanDuration(alert.window_seconds)}</dd>
               {alert.source_ip && (

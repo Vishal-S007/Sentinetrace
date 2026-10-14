@@ -2,7 +2,7 @@
 
 A log analysis and threat detection platform. It ingests web-server and authentication logs, normalizes them, runs deterministic detection rules, and presents evidence-backed alerts for investigation.
 
-> **Status:** Phase 5 (dashboard, event explorer and alert investigation UI) complete. See [Development progress](#development-progress). This is a local MVP under active development, not a production security product.
+> **Status:** Phase 6 (incidents, rule management, audit history and exports) complete. See [Development progress](#development-progress). This is a local MVP under active development, not a production security product.
 
 **Stack:** FastAPI · SQLAlchemy · Alembic · PostgreSQL 16 · React 19 · TypeScript · Vite · Tailwind CSS · Recharts · Pytest · Vitest · Playwright · Docker Compose
 
@@ -129,9 +129,29 @@ cd backend && uv run pytest tests/test_synthetic_dataset.py -s
 
 After signing in, the **Security overview** shows activity for the selected range (24 hours to all time). Every number, bar and list item links to the matching filtered view.
 
-- **Alert queue** (`/alerts`): filter by status, severity, rule, source IP or title. Filters live in the URL, so a view can be bookmarked or shared.
-- **Alert page:** what was observed, why the confidence level was chosen, recommended steps, and the original log lines as evidence. Analysts and admins can change the status with a note; each change is recorded in the audit log.
+- **Alert queue** (`/alerts`): filter by status, severity, rule, owner, source IP or title. Filters live in the URL, so a view can be bookmarked or shared. Analysts can tick several alerts and group them into an incident.
+- **Alert page:** what was observed, why the confidence level was chosen, recommended steps, and the original log lines as evidence. Analysts and admins can set the owner and status, add notes (a note, an action taken, or an evidence reference to an event), and add the alert to an incident. A history panel shows every change, from the audit log.
 - **Event explorer** (`/events`): search the raw log text and filter by time, IP or CIDR (`203.0.113.0/24`), event type, HTTP status (`404` or `4xx`), method, username, source, or whether detection flagged the event. Open any row to see every field and the alerts that reference it.
+- **Incidents** (`/incidents`): related alerts grouped for investigation, with an owner, status (open → investigating → contained → resolved / closed), severity and summary. The timeline merges when each alert was observed, every change, and every note in time order. Notes cannot be edited or deleted (a database trigger enforces this); corrections are new notes.
+- **Incident report:** download Markdown or JSON with the incident details, linked alerts, the first evidence lines of each, the timeline and the notes. Each download is audited.
+
+## Exports
+
+Analysts and admins can export what they are looking at, with the same filters, as CSV or JSON:
+
+| Export | Where | Limit |
+|---|---|---|
+| Alerts | Alert queue → Export | 50,000 rows |
+| Events | Event explorer → Export | 100,000 rows |
+| Audit log | Audit log → Export (admin) | 100,000 rows |
+
+- When a limit is reached the file is cut off and the response header `X-Export-Truncated: true` says so; narrow the filters to get the rest.
+- CSV cells that begin with `=`, `+`, `-`, `@`, tab or carriage return get a leading `'` so spreadsheet apps show them as text instead of running them as formulas. JSON keeps the original values.
+- Every export is recorded in the audit log with its filters and row count.
+
+## Detection rules
+
+**Detection rules** (`/rules`) lists every rule with its severity, state, version and open alerts. Admins can enable or disable a rule, change its severity and thresholds, and add a change note. Each save creates a new version, kept in the version history with what changed and who changed it. Changes apply to new imports; **Re-run detection** applies them to events already imported.
 
 ## Authentication and roles
 
@@ -145,7 +165,8 @@ After signing in, the **Security overview** shows activity for the selected rang
 - **CSRF:** every state-changing request needs an `X-CSRF-Token` header. It must match both the `st_csrf` cookie and the token bound to the session.
 - **Passwords:** hashed with Argon2id, minimum 12 characters.
 - **Login rate limiting:** 5 failed attempts per username or 20 per IP within 15 minutes returns `429` with `Retry-After`.
-- **Audit log:** append-only. A database trigger rejects `UPDATE`, `DELETE` and `TRUNCATE` on `audit_log`, and the API has no endpoint that writes or deletes entries.
+- **Audit log:** append-only. A database trigger rejects `UPDATE`, `DELETE` and `TRUNCATE` on `audit_log`, and the API has no endpoint that writes or deletes entries. Admins can filter it by action, actor, or target (for example one alert or incident) and export it.
+- **Investigation notes:** append-only in the same way (a trigger rejects `UPDATE` and `DELETE`).
 
 ## Security notes
 
@@ -173,6 +194,9 @@ After signing in, the **Security overview** shows activity for the selected rang
 | `Roles missing. Run 'alembic upgrade head' first.` | Run migrations before `create-admin` |
 | `dev-postgres.sh`: binaries not found | Install PostgreSQL 16 (e.g. `brew install postgresql@16` or `apt install postgresql-16`) |
 | Overview shows zeros after importing older logs | The range is relative to now; choose **All time** (the page offers it when older data exists) |
+| Changed a rule but old alerts did not change | Rule changes apply to new imports. Use **Detection rules → Re-run detection** to re-evaluate existing events |
+| Export stops at a round number | It hit the export limit (see [Exports](#exports)). Narrow the filters |
+| Owner list is empty when assigning | Only active analysts and admins can own alerts and incidents. Create one under **Users & roles** |
 
 ## Development progress
 
@@ -184,8 +208,8 @@ After signing in, the **Security overview** shows activity for the selected rang
 | 3 | Parsers, ingestion, normalization ([report](docs/reports/phase-3.md)) | ✅ |
 | 4 | Detection engine, alert grouping ([report](docs/reports/phase-4.md)) | ✅ |
 | 5 | Dashboard, event explorer, alert UI ([report](docs/reports/phase-5.md)) | ✅ |
-| 6 | Incidents, rules UI, audit, exports | ⏳ next |
-| 7 | Test hardening, security checks | |
+| 6 | Incidents, rules UI, audit, exports ([report](docs/reports/phase-6.md)) | ✅ |
+| 7 | Test hardening, security checks, retention | ⏳ next |
 | 8 | Full system acceptance | |
 
 Project requirements: [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)

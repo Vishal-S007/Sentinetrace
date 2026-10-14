@@ -1,4 +1,4 @@
-import type { AlertStatus, Severity } from '../api/client'
+import type { AlertStatus, IncidentStatus, NoteKind, Severity } from '../api/client'
 
 export const SEVERITIES: Severity[] = ['low', 'medium', 'high', 'critical']
 
@@ -32,3 +32,19 @@ export const ALERT_STATUSES: AlertStatus[] = ['new', 'investigating', 'resolved'
 
 /** Single-series charts (event volume) use the first categorical slot, dark-mode step. */
 export const SERIES_BLUE = '#3987e5'
+
+export const INCIDENT_STATUSES: IncidentStatus[] = ['open', 'investigating', 'contained', 'resolved', 'closed']
+
+export const INCIDENT_STATUS_LABEL: Record<IncidentStatus, string> = {
+  open: 'Open',
+  investigating: 'Investigating',
+  contained: 'Contained',
+  resolved: 'Resolved',
+  closed: 'Closed',
+}
+
+export const NOTE_KIND_LABEL: Record<NoteKind, string> = {
+  note: 'Note',
+  action: 'Action taken',
+  evidence: 'Evidence reference',
+}

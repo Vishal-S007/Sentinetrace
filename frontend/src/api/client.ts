@@ -187,6 +187,8 @@ export interface Alert {
   first_seen: string
   last_seen: string
   event_count: number
+  assigned_to: number | null
+  assignee: string | null
   created_at: string
   updated_at: string
 }
@@ -201,7 +203,6 @@ export interface AlertDetail extends Alert {
   evidence_truncated: boolean
   evidence_count: number
   details: Record<string, unknown>
-  assigned_to: number | null
 }
 
 export interface AlertPage {
@@ -242,6 +243,158 @@ export interface RuleSummary {
   severity: Severity
   enabled: boolean
 }
+
+export interface JsonSchemaProp {
+  type?: string
+  title?: string
+  description?: string
+  minimum?: number
+  maximum?: number
+  exclusiveMinimum?: number
+  items?: { type?: string }
+  default?: unknown
+}
+
+export interface Rule extends RuleSummary {
+  description: string
+  default_severity: Severity
+  version: number
+  config: Record<string, unknown>
+  default_config: Record<string, unknown>
+  config_schema: { properties?: Record<string, JsonSchemaProp>; required?: string[] }
+  recommended_steps: string[]
+  updated_at: string
+  updated_by: string | null
+  open_alerts: number
+}
+
+export interface RuleVersion {
+  version: number
+  enabled: boolean
+  severity: Severity
+  config: Record<string, unknown>
+  note: string
+  changed_by: string | null
+  changed_at: string
+}
+
+export interface RuleDetail extends Rule {
+  versions: RuleVersion[]
+}
+
+export type RuleUpdate = Partial<{ enabled: boolean; severity: Severity; config: Record<string, unknown>; note: string }>
+
+export interface DetectionRun {
+  id: number
+  trigger: string
+  status: 'queued' | 'running' | 'completed' | 'failed'
+  alerts_created: number
+  alerts_updated: number
+  error_message: string | null
+  created_at: string
+  finished_at: string | null
+}
+
+export type NoteKind = 'note' | 'action' | 'evidence'
+
+export interface Note {
+  id: number
+  kind: NoteKind
+  body: string
+  event_id: number | null
+  author: string
+  created_at: string
+}
+
+export interface NoteCreate {
+  kind: NoteKind
+  body: string
+  event_id?: number | null
+}
+
+export interface HistoryEntry {
+  id: number
+  occurred_at: string
+  actor: string | null
+  action: string
+  details: Record<string, unknown>
+}
+
+export type IncidentStatus = 'open' | 'investigating' | 'contained' | 'resolved' | 'closed'
+
+export interface IncidentRef {
+  id: number
+  title: string
+  status: IncidentStatus
+  severity: Severity
+}
+
+export interface AlertActivity {
+  notes: Note[]
+  history: HistoryEntry[]
+  incidents: IncidentRef[]
+}
+
+export interface Assignee {
+  id: number
+  username: string
+  role: RoleName
+}
+
+export interface Incident {
+  id: number
+  title: string
+  summary: string
+  status: IncidentStatus
+  severity: Severity
+  assigned_to: number | null
+  assignee: string | null
+  created_by: string
+  created_at: string
+  updated_at: string
+  closed_at: string | null
+  alert_count: number
+}
+
+export interface TimelineItem {
+  at: string
+  kind: 'observed' | 'change' | 'note'
+  title: string
+  detail: string | null
+  actor: string | null
+  alert_id: number | null
+  event_id: number | null
+}
+
+export interface IncidentDetail extends Incident {
+  alerts: Alert[]
+  notes: Note[]
+  timeline: TimelineItem[]
+}
+
+export interface IncidentPage {
+  items: Incident[]
+  next_before_id: number | null
+}
+
+export interface IncidentCreate {
+  title: string
+  summary?: string
+  severity?: Severity | null
+  assigned_to?: number | null
+  alert_ids?: number[]
+}
+
+export type IncidentUpdate = Partial<{
+  title: string
+  summary: string
+  status: IncidentStatus
+  severity: Severity
+  assigned_to: number | null
+  note: string
+}>
+
+export type IncidentFilters = Partial<{ status: string; severity: string; assigned_to: string; q: string; open_only: string }>
 
 export interface EventItem {
   id: number
@@ -321,6 +474,7 @@ export type AlertFilters = Partial<{
   severity: string
   rule_id: string
   source_ip: string
+  assigned_to: string
   q: string
   since: string
   until: string
@@ -405,7 +559,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
   return (await resp.json()) as T
 }
 
-function toQuery(params: Record<string, string | number | undefined>): string {
+export function toQuery(params: Record<string, string | number | undefined>): string {
   const q = new URLSearchParams()
   for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== '') q.set(k, String(v))
   const qs = q.toString()
@@ -460,8 +614,38 @@ export const api = {
     request<EvidencePage>(`/api/alerts/${id}/evidence${toQuery({ after_id, limit })}`),
   setAlertStatus: (id: number, status: AlertStatus, note = '') =>
     request<AlertDetail>(`/api/alerts/${id}`, { method: 'PATCH', body: { status, note } }),
-  rules: () => request<RuleSummary[]>('/api/rules'),
+  assignAlert: (id: number, assigned_to: number | null) =>
+    request<AlertDetail>(`/api/alerts/${id}`, { method: 'PATCH', body: { assigned_to } }),
+  alertActivity: (id: number) => request<AlertActivity>(`/api/alerts/${id}/activity`),
+  addAlertNote: (id: number, body: NoteCreate) =>
+    request<Note>(`/api/alerts/${id}/notes`, { method: 'POST', body }),
+  assignees: () => request<Assignee[]>('/api/assignees'),
 
-  audit: (params: { action?: string; actor?: string; before_id?: number; limit?: number }) =>
+  rules: () => request<Rule[]>('/api/rules'),
+  rule: (id: string) => request<RuleDetail>(`/api/rules/${encodeURIComponent(id)}`),
+  updateRule: (id: string, body: RuleUpdate) =>
+    request<RuleDetail>(`/api/rules/${encodeURIComponent(id)}`, { method: 'PATCH', body }),
+  runDetection: () => request<DetectionRun>('/api/detection/runs', { method: 'POST', body: {} }),
+  detectionRuns: () => request<DetectionRun[]>('/api/detection/runs?limit=5'),
+
+  incidents: (filters: IncidentFilters, before_id?: number, limit = 50) =>
+    request<IncidentPage>(`/api/incidents${toQuery({ ...filters, before_id, limit })}`),
+  incident: (id: number) => request<IncidentDetail>(`/api/incidents/${id}`),
+  createIncident: (body: IncidentCreate) => request<IncidentDetail>('/api/incidents', { method: 'POST', body }),
+  updateIncident: (id: number, body: IncidentUpdate) =>
+    request<IncidentDetail>(`/api/incidents/${id}`, { method: 'PATCH', body }),
+  linkAlerts: (id: number, alert_ids: number[]) =>
+    request<IncidentDetail>(`/api/incidents/${id}/alerts`, { method: 'POST', body: { alert_ids } }),
+  unlinkAlert: (id: number, alertId: number) =>
+    request<IncidentDetail>(`/api/incidents/${id}/alerts/${alertId}`, { method: 'DELETE' }),
+  addIncidentNote: (id: number, body: NoteCreate) =>
+    request<Note>(`/api/incidents/${id}/notes`, { method: 'POST', body }),
+  incidentReportUrl: (id: number, format: 'markdown' | 'json') => `/api/incidents/${id}/report${toQuery({ format })}`,
+
+  /** Download links: plain GETs, authenticated by the session cookie. */
+  exportUrl: (kind: 'alerts' | 'events' | 'audit', filters: Record<string, string | undefined>, format: 'csv' | 'json') =>
+    `/api/${kind}/export${toQuery({ ...filters, format })}`,
+
+  audit: (params: { action?: string; actor?: string; target_type?: string; target_id?: string; before_id?: number; limit?: number }) =>
     request<AuditPage>(`/api/audit${toQuery(params)}`),
 }

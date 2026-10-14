@@ -158,10 +158,7 @@ def _item(e: Event, source_name: str, summary: tuple[int, str | None]) -> dict[s
     }
 
 
-@router.get("", response_model=EventPage)
-def list_events(
-    _: Reader,
-    db: DbSession,
+def event_filters(
     q: Annotated[
         str | None,
         Query(
@@ -179,15 +176,12 @@ def list_events(
     flagged: Annotated[bool | None, Query(description="Linked to any alert")] = None,
     alert_severity: Annotated[str | None, Query(max_length=16)] = None,
     alert_id: Annotated[int | None, Query(gt=0)] = None,
-    cursor: Annotated[str | None, Query(max_length=200)] = None,
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
-    with_count: bool = False,
-) -> dict[str, Any]:
-    """Newest first. Results are always bounded by `limit`; totals are capped at 10,000."""
+) -> list[Any]:
+    """Shared by the explorer and the export, so both apply exactly the same filters."""
     for v in (since, until):
         if v is not None and v.tzinfo is None:
             raise _bad("since/until must include a time zone (e.g. ...Z)")
-    conds = build_filters(
+    return build_filters(
         q,
         since,
         until,
@@ -201,6 +195,21 @@ def list_events(
         alert_severity,
         alert_id,
     )
+
+
+EventFilters = Annotated[list[Any], Depends(event_filters)]
+
+
+@router.get("", response_model=EventPage)
+def list_events(
+    _: Reader,
+    db: DbSession,
+    conds: EventFilters,
+    cursor: Annotated[str | None, Query(max_length=200)] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    with_count: bool = False,
+) -> dict[str, Any]:
+    """Newest first. Results are always bounded by `limit`; totals are capped at 10,000."""
     page_conds = list(conds)
     if cursor:
         ts, eid = decode_cursor(cursor)

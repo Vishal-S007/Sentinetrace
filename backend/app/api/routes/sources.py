@@ -1,5 +1,6 @@
 """Log sources and file uploads."""
 
+import errno
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
@@ -72,6 +73,15 @@ def list_formats(_: Reader) -> list[FormatOut]:
 def list_sources(_: Reader, db: DbSession) -> list[SourceOut]:
     sources = list(db.scalars(select(LogSource).order_by(LogSource.name).limit(500)).all())
     return _with_stats(db, sources)
+
+
+def _raise_if_out_of_space(exc: OSError) -> None:
+    if exc.errno in (errno.ENOSPC, errno.EDQUOT):
+        raise HTTPException(
+            status.HTTP_507_INSUFFICIENT_STORAGE,
+            "The server is out of storage space for uploads. Ask an administrator to free "
+            "space (for example with a retention purge) and try again.",
+        ) from exc
 
 
 @router.post("/sources", response_model=SourceOut, status_code=status.HTTP_201_CREATED)
@@ -188,6 +198,9 @@ def upload_file(
         )
     except storage.UploadRejected as exc:
         raise HTTPException(exc.status_code, exc.message) from exc
+    except OSError as exc:
+        _raise_if_out_of_space(exc)
+        raise
 
     existing = db.scalar(
         select(ImportedFile).where(
@@ -202,7 +215,12 @@ def upload_file(
             f"(as '{existing.original_filename}', file #{existing.id}).",
         )
 
-    key = storage.commit_upload(staged, settings.storage_dir)
+    try:
+        key = storage.commit_upload(staged, settings.storage_dir)
+    except OSError as exc:
+        storage.discard(staged)
+        _raise_if_out_of_space(exc)
+        raise
     imported = ImportedFile(
         source_id=source.id,
         original_filename=display_name,

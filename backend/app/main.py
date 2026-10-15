@@ -7,9 +7,11 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.routes import (
+    admin,
     audit,
     auth,
     dashboard,
@@ -49,6 +51,8 @@ class QuietHealthChecks(logging.Filter):
 _access_logger = logging.getLogger("uvicorn.access")
 if not any(isinstance(f, QuietHealthChecks) for f in _access_logger.filters):
     _access_logger.addFilter(QuietHealthChecks())
+
+API_CSP = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
 
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
@@ -91,6 +95,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         response.headers["X-Request-ID"] = request_id
         for key, value in SECURITY_HEADERS.items():
             response.headers.setdefault(key, value)
+        # API responses are data, never documents: forbid every resource type and framing.
+        # The interactive docs page loads its own scripts, so it is exempt.
+        if not request.url.path.startswith("/api/docs"):
+            response.headers.setdefault("Content-Security-Policy", API_CSP)
         return response
 
     @app.exception_handler(StarletteHTTPException)
@@ -106,6 +114,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Report field locations and messages, but never echo raw input back.
         errors = [{"loc": e.get("loc"), "msg": e.get("msg")} for e in exc.errors()]
         return JSONResponse(status_code=422, content={"detail": errors})
+
+    @app.exception_handler(OperationalError)
+    async def database_unavailable(request: Request, exc: OperationalError) -> JSONResponse:
+        # Connection refused / dropped / timed out: a temporary outage, not a bug.
+        request_id = getattr(request.state, "request_id", "unknown")
+        logger.error("Database unavailable (request_id=%s): %s", request_id, exc.orig)
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": "The database is temporarily unavailable. Try again shortly.",
+                "request_id": request_id,
+            },
+            headers={"Retry-After": "5"},
+        )
 
     @app.exception_handler(Exception)
     async def unhandled_error(request: Request, exc: Exception) -> JSONResponse:
@@ -129,6 +151,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(dashboard.router, prefix="/api")
     app.include_router(events.router, prefix="/api")
     app.include_router(incidents.router, prefix="/api")
+    app.include_router(admin.router, prefix="/api")
     return app
 
 

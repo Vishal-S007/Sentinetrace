@@ -11,6 +11,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="ST_",
+        env_ignore_empty=True,  # "ST_X=" in .env or Compose means "use the default"
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
@@ -41,6 +42,15 @@ class Settings(BaseSettings):
     # The worker touches this file after each successful poll of the database; the
     # container health check (`python -m app.worker --check-health`) reads its age.
     worker_heartbeat_file: Path | None = None
+
+    # Retention (see docs: never touches open alerts, incidents, notes or the audit log)
+    retention_min_days: int = Field(default=7, ge=1)
+    # If set, the worker purges data older than this many days once a day.
+    retention_auto_days: int | None = Field(default=None, ge=1)
+    retention_batch_size: int = Field(default=5000, ge=100, le=100_000)
+
+    # Abuse limits on expensive read endpoints (exports and reports), per user per minute
+    export_rate_per_minute: int = Field(default=10, ge=1)
 
     # Detection
     alert_group_minutes: int = Field(default=60, ge=5, le=1440)

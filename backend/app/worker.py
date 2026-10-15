@@ -10,12 +10,17 @@ import logging
 import signal
 import sys
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from app.core.config import get_settings
+from sqlalchemy.orm import Session
+
+from app.core.config import Settings, get_settings
 from app.db.session import get_sessionmaker
 from app.detection.runs import claim_next_run, process_run
 from app.ingestion.processor import claim_next_job, process_job, recover_stale_jobs
+from app.models import AppConfig
+from app.services import retention
 
 logger = logging.getLogger("sentineltrace.worker")
 _stop = False
@@ -53,51 +58,107 @@ def check_health(path: Path | None, poll_seconds: float, now: float | None = Non
     return age <= heartbeat_max_age(poll_seconds)
 
 
+RETENTION_CHECK_SECONDS = 3600
+RETENTION_INTERVAL = timedelta(hours=24)
+RETENTION_KEY = "retention.last_auto_run"
+MAX_BACKOFF_SECONDS = 60.0
+_sleep = time.sleep  # replaced in tests
+
+
+def maybe_auto_purge(db: Session, settings: Settings, now: datetime | None = None) -> bool:
+    """If ST_RETENTION_AUTO_DAYS is set, purge once per 24 hours. Returns True if it ran."""
+    if settings.retention_auto_days is None:
+        return False
+    now = now or datetime.now(UTC)
+    row = db.get(AppConfig, RETENTION_KEY)
+    if row is not None and isinstance(row.value, str):
+        if now - datetime.fromisoformat(row.value) < RETENTION_INTERVAL:
+            return False
+    counts = retention.purge(db, settings, settings.retention_auto_days, actor_username="worker")
+    if row is None:
+        db.add(AppConfig(key=RETENTION_KEY, value=now.isoformat()))
+    else:
+        row.value = now.isoformat()
+    db.commit()
+    logger.info("Automatic retention purge: %s", counts.as_dict())
+    return True
+
+
+class _State:
+    def __init__(self) -> None:
+        self.last_recovery = 0.0
+        self.last_retention_check = 0.0
+
+
+def _tick(db: Session, settings: Settings, state: _State) -> bool:
+    """One unit of work. Returns True if something was processed."""
+    if time.monotonic() - state.last_recovery > 60:
+        if recovered := recover_stale_jobs(db, settings):
+            logger.warning("Recovered %d stale job(s)", recovered)
+        state.last_recovery = time.monotonic()
+    job = claim_next_job(db)
+    _beat(settings.worker_heartbeat_file)  # the database answered
+    if job is not None:
+        logger.info("Processing job %s (file %s)", job.id, job.file_id)
+        process_job(db, job, settings)
+        logger.info(
+            "Job %s finished: %s (parsed=%s rejected=%s duplicates=%s)",
+            job.id,
+            job.status,
+            job.parsed_count,
+            job.rejected_count,
+            job.duplicate_count,
+        )
+        return True
+    run_item = claim_next_run(db)
+    if run_item is not None:
+        logger.info("Detection run %s (%s)", run_item.id, run_item.trigger)
+        process_run(db, run_item, settings)
+        logger.info(
+            "Detection run %s %s: %s alert(s) created, %s updated",
+            run_item.id,
+            run_item.status,
+            run_item.alerts_created,
+            run_item.alerts_updated,
+        )
+        return True
+    if time.monotonic() - state.last_retention_check > RETENTION_CHECK_SECONDS:
+        state.last_retention_check = time.monotonic()
+        maybe_auto_purge(db, settings)
+    return False
+
+
 def run(once: bool = False) -> int:
+    """Process work until stopped. A failed iteration (e.g. the database is unreachable)
+    is logged and retried with exponential backoff instead of crashing the worker."""
     settings = get_settings()
     settings.storage_dir.mkdir(parents=True, exist_ok=True)
     session_factory = get_sessionmaker()
-    heartbeat = settings.worker_heartbeat_file
     logger.info("Worker started (poll every %ss)", settings.worker_poll_seconds)
+    state = _State()
     processed = 0
-    last_recovery = 0.0
+    failures = 0
     while not _stop:
-        with session_factory() as db:
-            if time.monotonic() - last_recovery > 60:
-                if recovered := recover_stale_jobs(db, settings):
-                    logger.warning("Recovered %d stale job(s)", recovered)
-                last_recovery = time.monotonic()
-            job = claim_next_job(db)
-            _beat(heartbeat)  # the database answered
-            if job is not None:
-                logger.info("Processing job %s (file %s)", job.id, job.file_id)
-                process_job(db, job, settings)
-                logger.info(
-                    "Job %s finished: %s (parsed=%s rejected=%s duplicates=%s)",
-                    job.id,
-                    job.status,
-                    job.parsed_count,
-                    job.rejected_count,
-                    job.duplicate_count,
-                )
-                processed += 1
-                continue
-            run_item = claim_next_run(db)
-            if run_item is not None:
-                logger.info("Detection run %s (%s)", run_item.id, run_item.trigger)
-                process_run(db, run_item, settings)
-                logger.info(
-                    "Detection run %s %s: %s alert(s) created, %s updated",
-                    run_item.id,
-                    run_item.status,
-                    run_item.alerts_created,
-                    run_item.alerts_updated,
-                )
-                processed += 1
-                continue
+        try:
+            with session_factory() as db:
+                worked = _tick(db, settings, state)
+            failures = 0
+        except Exception:
+            failures += 1
+            delay = min(MAX_BACKOFF_SECONDS, settings.worker_poll_seconds * 2 ** min(failures, 8))
+            logger.exception(
+                "Worker iteration failed (%d in a row); retrying in %.0fs", failures, delay
+            )
+            if once:
+                break
+            _sleep(delay)
+            continue
+        if worked:
+            processed += 1
+            continue
         if once:
             break
-        time.sleep(settings.worker_poll_seconds)
+        _sleep(settings.worker_poll_seconds)
     return processed
 
 

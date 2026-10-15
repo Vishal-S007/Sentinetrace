@@ -21,8 +21,10 @@ test('anonymous users are sent to the login page', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible()
 })
 
-test('wrong password shows a generic error', async ({ page }) => {
-  await signIn(page, ADMIN_USER, 'definitely-not-the-password')
+test('wrong credentials show a generic error', async ({ page }) => {
+  // An unknown account gets the same message as a wrong password (no user enumeration).
+  // Using one keeps the admin account clear of the login rate limit on repeated runs.
+  await signIn(page, `e2e.nobody.${Date.now().toString(36)}`, 'definitely-not-the-password')
   await expect(page.getByRole('alert')).toHaveText('Invalid username or password.')
   await expect(page).toHaveURL(/\/login$/)
 })

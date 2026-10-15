@@ -11,6 +11,7 @@ import { EventsPage } from './pages/EventsPage'
 import { IncidentDetailPage } from './pages/IncidentDetailPage'
 import { IncidentNewPage } from './pages/IncidentNewPage'
 import { IncidentsPage } from './pages/IncidentsPage'
+import { RetentionPage } from './pages/RetentionPage'
 import { RuleDetailPage } from './pages/RuleDetailPage'
 import { RulesPage } from './pages/RulesPage'
 import { AuditPage } from './pages/AuditPage'
@@ -36,6 +37,7 @@ const NAV: { to: string; label: string; permission?: string }[] = [
   { to: '/status', label: 'System status' },
   { to: '/admin/users', label: 'Users & roles', permission: 'users:manage' },
   { to: '/admin/audit', label: 'Audit log', permission: 'audit:read' },
+  { to: '/admin/retention', label: 'Data retention', permission: 'settings:manage' },
 ]
 
 function Shell() {
@@ -213,6 +215,14 @@ function Shell() {
             element={
               <RequirePermission permission="audit:read">
                 <AuditPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/admin/retention"
+            element={
+              <RequirePermission permission="settings:manage">
+                <RetentionPage />
               </RequirePermission>
             }
           />

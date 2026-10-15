@@ -80,6 +80,8 @@ class ImportedFile(Base):
     # "utf-8", or "utf-8 (invalid bytes replaced)" when some bytes weren't valid UTF-8.
     encoding: Mapped[str] = mapped_column(String(48))
     storage_key: Mapped[str] = mapped_column(String(128))
+    # Set when retention removed the stored upload; metadata and events are kept.
+    content_purged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     uploaded_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

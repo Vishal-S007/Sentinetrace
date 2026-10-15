@@ -480,6 +480,19 @@ export type AlertFilters = Partial<{
   until: string
 }>
 
+export interface RetentionCounts {
+  cutoff: string
+  older_than_days: number
+  alerts: number
+  evidence_links: number
+  events: number
+  ingestion_errors: number
+  stored_files: number
+  stored_bytes: number
+  min_days: number
+  auto_days: number | null
+}
+
 // ---- Transport ----
 
 const UNSAFE = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
@@ -645,6 +658,11 @@ export const api = {
   /** Download links: plain GETs, authenticated by the session cookie. */
   exportUrl: (kind: 'alerts' | 'events' | 'audit', filters: Record<string, string | undefined>, format: 'csv' | 'json') =>
     `/api/${kind}/export${toQuery({ ...filters, format })}`,
+
+  retentionPreview: (older_than_days: number) =>
+    request<RetentionCounts>(`/api/admin/retention${toQuery({ older_than_days })}`),
+  retentionPurge: (older_than_days: number) =>
+    request<RetentionCounts>('/api/admin/retention/purge', { method: 'POST', body: { older_than_days, confirm: 'PURGE' } }),
 
   audit: (params: { action?: string; actor?: string; target_type?: string; target_id?: string; before_id?: number; limit?: number }) =>
     request<AuditPage>(`/api/audit${toQuery(params)}`),

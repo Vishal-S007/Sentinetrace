@@ -12,6 +12,7 @@ from sqlalchemy import (
     String,
     Text,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -71,6 +72,7 @@ class InvestigationNote(Base):
         CheckConstraint("length(body) BETWEEN 1 AND 5000", name="ck_notes_body_length"),
         Index("ix_notes_alert", "alert_id", "id"),
         Index("ix_notes_incident", "incident_id", "id"),
+        Index("ix_notes_event", "event_id", postgresql_where=text("event_id IS NOT NULL")),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)

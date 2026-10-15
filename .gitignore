@@ -15,3 +15,6 @@ uploads/
 storage/
 .env.devdb
 .ruff_cache/
+.coverage
+.coverage.*
+htmlcov/

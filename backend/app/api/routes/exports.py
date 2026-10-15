@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 
-from app.api.deps import AuthContext, DbSession, require
+from app.api.deps import AppSettings, AuthContext, DbSession, require
 from app.api.routes.audit import AuditFilters
 from app.api.routes.detection import AlertFilters
 from app.api.routes.events import EventFilters
@@ -20,6 +20,7 @@ from app.detection.registry import RULES
 from app.models import Alert, AuditLog, Event, LogSource, User
 from app.services import audit
 from app.services.exports import ExportFormat, export_response, query_filters, write_export
+from app.services.limits import enforce_export_rate
 
 router = APIRouter(tags=["exports"])
 
@@ -78,10 +79,12 @@ def export_alerts(
     auth: AlertExporter,
     request: Request,
     db: DbSession,
+    settings: AppSettings,
     conds: AlertFilters,
     format: Format = "csv",  # noqa: A002
 ) -> StreamingResponse:
     """Alerts matching the queue filters, newest first (at most 50,000)."""
+    enforce_export_rate(db, auth.user, settings)
     stmt = (
         select(
             Alert.id,
@@ -119,10 +122,12 @@ def export_events(
     auth: EventExporter,
     request: Request,
     db: DbSession,
+    settings: AppSettings,
     conds: EventFilters,
     format: Format = "csv",  # noqa: A002
 ) -> StreamingResponse:
     """Events matching the explorer filters, newest first (at most 100,000)."""
+    enforce_export_rate(db, auth.user, settings)
     stmt = (
         select(
             Event.id,
@@ -157,10 +162,12 @@ def export_audit(
     auth: AuditExporter,
     request: Request,
     db: DbSession,
+    settings: AppSettings,
     conds: AuditFilters,
     format: Format = "csv",  # noqa: A002
 ) -> StreamingResponse:
     """Audit entries matching the audit log filters, newest first (at most 100,000)."""
+    enforce_export_rate(db, auth.user, settings)
     stmt = (
         select(
             AuditLog.id,

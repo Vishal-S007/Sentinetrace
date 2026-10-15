@@ -28,6 +28,8 @@ services:
       ST_ENVIRONMENT: ${ST_ENVIRONMENT:-development}
       ST_DATABASE_URL: postgresql+psycopg://sentineltrace:${ST_PG_PASSWORD}@db:5432/sentineltrace
       ST_MAX_UPLOAD_BYTES: ${ST_MAX_UPLOAD_BYTES:-52428800}
+      ST_EXPORT_RATE_PER_MINUTE: ${ST_EXPORT_RATE_PER_MINUTE:-}
+      ST_RETENTION_MIN_DAYS: ${ST_RETENTION_MIN_DAYS:-}
       # Set to true when the app is served over HTTPS (required in production).
       ST_COOKIE_SECURE: ${ST_COOKIE_SECURE:-false}
       # The backend is reachable only from the nginx container on the internal network,
@@ -47,6 +49,9 @@ services:
       ST_ENVIRONMENT: ${ST_ENVIRONMENT:-development}
       ST_DATABASE_URL: postgresql+psycopg://sentineltrace:${ST_PG_PASSWORD}@db:5432/sentineltrace
       ST_WORKER_HEARTBEAT_FILE: /tmp/worker-heartbeat
+      # Optional: purge data older than N days once a day (see README "Data retention").
+      ST_RETENTION_AUTO_DAYS: ${ST_RETENTION_AUTO_DAYS:-}
+      ST_RETENTION_MIN_DAYS: ${ST_RETENTION_MIN_DAYS:-}
     volumes:
       - storage:/app/storage
     depends_on:

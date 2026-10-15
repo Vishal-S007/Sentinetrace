@@ -70,16 +70,14 @@ test('investigate an alert: import, overview, queue, evidence, triage, explorer,
     await expect(page.getByRole('link', { name: `SQL injection indicators from ${ip}` })).toBeVisible({ timeout: 2_000 })
   }).toPass({ timeout: 45_000 })
 
-  // The overview counts it and links to it.
+  // The overview lists it among the newest high-severity alerts and links to it.
+  // (Not the top-IP list: on a database with earlier runs this IP need not be in the top 10.)
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Overview' }).click()
   await expect(page.getByRole('heading', { name: 'Security overview' })).toBeVisible()
-  const ips = page.getByRole('region', { name: 'Top source IPs by alerts' })
-  await expect(ips.getByRole('link', { name: ip })).toBeVisible()
-  await ips.getByRole('link', { name: ip }).click()
-  await expect(page).toHaveURL(new RegExp(`/alerts\\?source_ip=${ip.replaceAll('.', '\\.')}$`))
+  const recent = page.getByRole('region', { name: 'Recent high-severity alerts' })
+  await recent.getByRole('link', { name: new RegExp(`SQL injection indicators from ${ip.replaceAll('.', '\\.')}`) }).click()
 
   // Open the alert: explanation, confidence reason and raw evidence lines.
-  await page.getByRole('link', { name: `SQL injection indicators from ${ip}` }).click()
   await expect(page.getByRole('heading', { name: `SQL injection indicators from ${ip}` })).toBeVisible()
   await expect(page.getByRole('region', { name: 'What was observed' })).toContainText('does not show the attack succeeded')
   const evidence = page.getByRole('region', { name: 'Evidence' })

@@ -1,0 +1,18 @@
+{
+  "description": "Benign-only traffic; the default rules should raise no alerts.",
+  "start": "2026-10-02T00:00:00+00:00",
+  "hours": 24,
+  "source_timezone": "UTC",
+  "reference_time": "2026-10-04T00:00:00+00:00",
+  "sources": {
+    "web_access.log": "apache_combined",
+    "auth.log": "auth_log",
+    "app_events.jsonl": "json"
+  },
+  "lines": {
+    "web_access.log": 22272,
+    "auth.log": 160,
+    "app_events.jsonl": 1200
+  },
+  "expected_alerts": []
+}

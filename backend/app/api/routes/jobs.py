@@ -5,13 +5,21 @@ import io
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import AuthContext, DbSession, require
 from app.core.permissions import Permission
 from app.ingestion.processor import reset_job_for_retry
-from app.models import IngestionError, IngestionJob, LogSource, User
+from app.models import (
+    Event,
+    ImportedFile,
+    IngestionError,
+    IngestionJob,
+    InvestigationNote,
+    LogSource,
+    User,
+)
 from app.schemas.ingestion import ErrorPage, IngestionErrorOut, JobOut, JobPage, JobStatus
 from app.services import audit
 
@@ -152,6 +160,26 @@ def retry_job(job_id: int, auth: Importer, request: Request, db: DbSession) -> J
     job = _get_job(db, job_id)
     if job.status != "failed":
         raise HTTPException(status.HTTP_409_CONFLICT, "Only failed jobs can be retried")
+    if (
+        db.scalar(select(ImportedFile.content_purged_at).where(ImportedFile.id == job.file_id))
+        is not None
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "The uploaded file was removed by data retention. Upload it again instead.",
+        )
+    if db.scalar(
+        select(
+            exists().where(
+                InvestigationNote.event_id.in_(select(Event.id).where(Event.job_id == job.id))
+            )
+        )
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Events from this job are referenced by investigation notes, so it cannot be "
+            "re-processed.",
+        )
     reset_job_for_retry(db, job)
     audit.record(
         db,

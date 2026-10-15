@@ -9,7 +9,7 @@ from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import AuthContext, DbSession, require
+from app.api.deps import AppSettings, AuthContext, DbSession, require
 from app.api.routes.detection import alerts_out
 from app.core.permissions import Permission
 from app.models import Alert, Incident, IncidentAlert
@@ -26,6 +26,7 @@ from app.schemas.incidents import (
 )
 from app.services import audit
 from app.services.incident_report import build_timeline, render_markdown, report_data
+from app.services.limits import enforce_export_rate
 from app.services.notes import add_note, list_notes, note_out
 from app.services.people import assignee as validate_assignee
 from app.services.people import usernames
@@ -328,10 +329,12 @@ def export_report(
     auth: Exporter,
     request: Request,
     db: DbSession,
+    settings: AppSettings,
     format: Annotated[Literal["markdown", "json"], Query()] = "markdown",  # noqa: A002
 ) -> Response:
     """Download a report: details, linked alerts with evidence samples, timeline and notes."""
     inc = _get(db, incident_id)
+    enforce_export_rate(db, auth.user, settings)
     data = report_data(db, _detail(db, inc), auth.user.username)
     audit.record(
         db,

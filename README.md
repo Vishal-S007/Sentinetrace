@@ -1,23 +1,79 @@
 # SentinelTrace
 
-A log analysis and threat detection platform. It ingests web-server and authentication logs, normalizes them, runs deterministic detection rules, and presents evidence-backed alerts for investigation.
+A log analysis and threat detection platform. It imports web-server, application and authentication logs, normalizes them into one event schema, runs deterministic detection rules, and presents evidence-backed alerts for investigation, incident handling and reporting.
 
-> **Status:** Phase 7 (retention, failure handling, security checks and test hardening) complete. See [Development progress](#development-progress). This is a local MVP under active development, not a production security product.
+> **Status:** all eight development phases complete ([acceptance report](docs/reports/phase-8.md)). This is a **local MVP for synthetic or authorized logs**, not a production security product. Detection quality is measured only on the bundled synthetic datasets.
 
 **Stack:** FastAPI · SQLAlchemy · Alembic · PostgreSQL 16 · React 19 · TypeScript · Vite · Tailwind CSS · Recharts · Pytest · Vitest · Playwright · Docker Compose
 
----
+![Security overview](docs/screenshots/02-dashboard.png)
+
+## Features
+
+- **Ingestion:**
+  - Apache combined, Nginx (common, combined or a custom `log_format`), JSON lines and Linux `auth.log`, with format auto-detection
+  - streaming parser with per-line rejection reasons, duplicate detection, upload limits, and safe, content-addressed file storage
+- **Detection:**
+  - 10 deterministic, versioned rules: authentication failures, brute force, SQL injection, XSS, path traversal, request bursts, 401/403 floods, 404 reconnaissance, suspicious methods, multi-stage correlation
+  - alerts are grouped per entity and hour, linked to the original log lines, and explained with a confidence level and next steps
+- **Investigation:**
+  - live dashboard with drill-downs, a server-side event explorer, and an alert queue with owners and notes
+  - incidents with a merged timeline, and Markdown/JSON incident reports
+- **Reporting:** CSV/JSON exports of alerts, events and the audit log, with the same filters as the screens.
+- **Administration:**
+  - users and roles (viewer, analyst, admin)
+  - an append-only audit log
+  - detection rule tuning with version history
+  - data retention with preview
+  - a settings & health screen
+- **Security:**
+  - server-side sessions in HttpOnly cookies, CSRF protection, Argon2id passwords and login rate limiting
+  - strict Content-Security-Policy, and authorization checks on every endpoint (enforced by a test)
+- **Quality:**
+  - 379 backend tests (96% line coverage), 87 frontend tests and 7 Playwright journeys
+  - an evaluation against ground truth, with no missed alerts, no wrong alerts, and zero alerts on 24 hours of benign traffic
+  - an [automated acceptance check](#acceptance-check)
+
+| | |
+|---|---|
+| ![Alert investigation](docs/screenshots/04-alert-investigation.png) | ![Incident](docs/screenshots/05-incident.png) |
+| Alert with evidence, explanation and triage | Incident with linked alerts and timeline |
+| ![Alert queue](docs/screenshots/03-alert-queue.png) | ![Event explorer](docs/screenshots/06-event-explorer.png) |
+| Alert queue with filters and bulk incident creation | Event explorer with raw log line and linked alerts |
+| ![Detection rule](docs/screenshots/07-detection-rule.png) | ![Settings and status](docs/screenshots/08-settings-status.png) |
+| Versioned rule settings | Settings & system health |
+
+## Architecture
+
+```mermaid
+flowchart LR
+  B[Browser<br/>React SPA] -->|same origin, cookie session + CSRF| N[nginx<br/>static files + /api proxy]
+  N --> A[FastAPI API]
+  A --> P[(PostgreSQL 16)]
+  A -->|uploads| S[(Upload storage)]
+  W[Worker<br/>ingestion + detection] --> P
+  W --> S
+  A -.queues jobs.-> P
+  P -.claims jobs<br/>FOR UPDATE SKIP LOCKED.-> W
+```
+
+- **API (`backend/app`):** authentication, uploads, queries, triage, exports. Every endpoint checks permissions.
+- **Worker (`python -m app.worker`):** claims queued imports and detection runs from the database (no separate message broker), parses files in batches with `COPY`, then runs detection on the imported time range. It retries with backoff if the database is unavailable.
+- **Database:** normalized events with time and IP indexes, alerts with evidence links, incidents and notes, and an append-only audit log enforced by triggers. The schema is managed by Alembic migrations.
+- **Frontend (`frontend/src`):** a React single-page app. All filtering and paging happen on the server.
 
 ## Quick start (Docker Compose)
 
+Requirements: Docker Desktop (or Docker Engine with Compose), Git and Python 3.
+
 ```bash
-cp .env.example .env
-# set ST_PG_PASSWORD in .env, e.g.:
-python3 -c "import secrets; print(secrets.token_urlsafe(24))"
-docker compose up --build
+git clone https://github.com/Vishal-S007/Sentinetrace.git && cd Sentinetrace
+# Write a .env with a random database password (optional settings: see .env.example)
+python3 -c "import secrets; print('ST_PG_PASSWORD=' + secrets.token_urlsafe(24))" > .env
+docker compose up --build -d
 ```
 
-Database migrations run automatically when the backend starts. Create the first admin account:
+Database migrations run automatically when the backend starts. Create the first admin account (the password needs at least 12 characters):
 
 ```bash
 docker compose exec backend python -m app.cli create-admin --username admin
@@ -25,6 +81,15 @@ docker compose exec backend python -m app.cli create-admin --username admin
 
 - App: <http://localhost:8080> (sign in with the admin account)
 - API docs (OpenAPI): <http://localhost:8080/api/docs>
+- Logs: `docker compose logs -f backend worker` · Stop: `docker compose down` (data is kept) · Reset everything: `docker compose down -v`
+
+**Try it with the demo data:**
+1. Under **Log sources**, create three sources:
+   - `web` with format `apache_combined`
+   - `auth` with format `auth_log`
+   - `app` with format `json`
+2. Upload `web_access.log`, `auth.log` and `app_events.jsonl` from `datasets/synthetic/` to the matching sources.
+3. Open **Overview** → **All time**. The 13 expected alerts appear within seconds.
 
 ## Local development (without Docker)
 
@@ -32,6 +97,7 @@ Requirements: Python 3.13, [uv](https://docs.astral.sh/uv/), Node 22, PostgreSQL
 
 ```bash
 # 1. Database: a local cluster in ./.pgdata on 127.0.0.1:5432
+#    (ST_PG_PORT / ST_PG_DATA change the port / data folder)
 export ST_PG_PASSWORD='choose-a-local-password'
 scripts/dev-postgres.sh start          # creates the sentineltrace and sentineltrace_test DBs
 
@@ -43,6 +109,7 @@ EOF
 uv sync
 uv run alembic upgrade head            # create/upgrade the schema
 uv run python -m app.cli create-admin --username admin   # first time only; prompts for a password
+#   (non-interactive: ST_ADMIN_PASSWORD='...' uv run python -m app.cli create-admin --username admin)
 uv run uvicorn app.main:app --reload --port 8000
 
 # 3. Ingestion worker (separate terminal): processes uploaded log files
@@ -92,14 +159,37 @@ Two synthetic datasets are evaluated by the tests:
 
 Both are regenerated byte-for-byte by their `generate.py`.
 
+## Acceptance check
+
+`scripts/acceptance.py` checks a running installation against the spec's final delivery criteria, through the API only:
+- services up
+- authentication and roles
+- import and parsing
+- alerts matching the ground truth
+- no alerts on benign traffic
+- investigation changes persisting and audited
+- dashboard figures matching independent queries
+- exports matching the screens
+
+It needs only Python 3.11+ (no packages). Run it on a **fresh** installation, because it imports the synthetic datasets:
+
+```bash
+docker compose down -v && docker compose up -d --build     # fresh database
+docker compose exec backend python -m app.cli create-admin --username admin
+python3 scripts/acceptance.py --base-url http://localhost:8080 --username admin
+# local development: --base-url http://localhost:5173
+```
+
+It prints PASS/FAIL with the evidence for each of the 21 checks and exits non-zero if any fail. It creates two temporary users, six log sources and one incident.
+
 ## Project layout
 
 ```
 backend/    FastAPI app (app/), parsers (app/ingestion/), detection (app/detection/), worker (app/worker.py), tests/, Alembic migrations (alembic/), CLI (app/cli.py)
 datasets/   synthetic/: deterministic generator + ground truth for evaluating detection
 frontend/   React + Vite SPA, Vitest tests (src/**/*.test.tsx), Playwright specs (e2e/)
-scripts/    dev-postgres.sh: Docker-free local database
-docs/       spec, plan, per-phase reports
+scripts/    dev-postgres.sh: Docker-free local database; acceptance.py: end-to-end acceptance check
+docs/       spec, deployment guide, acceptance matrix, per-phase reports, screenshots
 ```
 
 ## Importing logs
@@ -206,6 +296,10 @@ docker compose exec backend python -m app.cli purge --older-than-days 90 --execu
 - **Audit log:** append-only. A database trigger rejects `UPDATE`, `DELETE` and `TRUNCATE` on `audit_log`, and the API has no endpoint that writes or deletes entries. Admins can filter it by action, actor, or target (for example one alert or incident) and export it.
 - **Investigation notes:** append-only in the same way (a trigger rejects `UPDATE` and `DELETE`).
 
+## Deployment
+
+[docs/deployment.md](docs/deployment.md) covers running SentinelTrace beyond a laptop: HTTPS, secrets, database roles and backups, upgrades, retention, monitoring and the limits of this MVP.
+
 ## Security notes
 
 - No secrets are committed. All credentials come from environment variables, and `.env` files are git-ignored.
@@ -254,6 +348,6 @@ docker compose exec backend python -m app.cli purge --older-than-days 90 --execu
 | 5 | Dashboard, event explorer, alert UI ([report](docs/reports/phase-5.md)) | ✅ |
 | 6 | Incidents, rules UI, audit, exports ([report](docs/reports/phase-6.md)) | ✅ |
 | 7 | Test hardening, security checks, retention ([report](docs/reports/phase-7.md)) | ✅ |
-| 8 | Full system acceptance | ⏳ next |
+| 8 | Full system acceptance ([report](docs/reports/phase-8.md)) | ✅ |
 
 Project requirements: [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)

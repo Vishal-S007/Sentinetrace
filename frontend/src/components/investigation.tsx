@@ -92,11 +92,12 @@ export function NoteComposer({ onSubmit }: { onSubmit: (body: NoteCreate) => Pro
     if (!body.trim()) return
     setBusy(true)
     setError(null)
+    const sent = body
     try {
       await onSubmit({ kind, body: body.trim(), event_id: eventId ? Number(eventId) : null })
-      setBody('')
+      // Clear only what was sent: text typed while saving is kept.
+      setBody((current) => (current === sent ? '' : current))
       setEventId('')
-      setKind('note')
     } catch (err) {
       setError(errorMessage(err))
     } finally {

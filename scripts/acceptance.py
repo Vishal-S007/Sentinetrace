@@ -283,7 +283,6 @@ def main() -> int:
               and sum(j["parsed_count"] for j in jobs) == sum(lines.values()),
               "; ".join(f"{j['filename']}: {j['status']}, {j['parsed_count']} parsed, "
                         f"{j['rejected_count']} rejected" for j in jobs))  # fmt: skip
-    dup = analyst.status_of("POST", f"/api/sources/{jobs[0]['source_id']}/files")
     try:
         analyst.post(
             f"/api/sources/{jobs[0]['source_id']}/files",
@@ -315,11 +314,13 @@ def main() -> int:
     for a in alerts:
         ev = admin.get(f"/api/alerts/{a['id']}/evidence", limit=5)
         evidence_ok.append(
-            ev["total_linked"] > 0
-            and all(i["raw_line"] for i in ev["items"])
-            and a["reason"]
-            and a["confidence_reason"]
-            and a["recommended_steps"]
+            bool(
+                ev["total_linked"] > 0
+                and all(i["raw_line"] for i in ev["items"])
+                and a["reason"]
+                and a["confidence_reason"]
+                and a["recommended_steps"]
+            )
         )
     rep.check(
         "5",
@@ -400,13 +401,22 @@ def main() -> int:
         for s in ("low", "medium", "high", "critical")
     }
     dash_sev = {r["key"]: r["count"] for r in dash["alerts_by_severity"]}
+    per_source = sum(src["event_count"] for src in admin.get("/api/sources"))
     capped = explorer["count_capped"]
     rep.check(
         "8",
-        "Total events = event explorer count",
-        capped or dash["totals"]["events"] == explorer["count"],
-        f"dashboard {dash['totals']['events']}, explorer {explorer['count']}"
-        + (" (explorer count capped; compared up to the cap)" if capped else ""),
+        "Total events = sum of per-source counts (and explorer count)",
+        dash["totals"]["events"] == per_source
+        and (capped or dash["totals"]["events"] == explorer["count"]),
+        f"dashboard {dash['totals']['events']}, sources {per_source}, explorer "
+        + (f"{explorer['count']}+ (capped)" if capped else str(explorer["count"])),
+    )
+    sources_tile = len(admin.get("/api/sources"))
+    rep.check(
+        "8",
+        "Log sources tile = sources list",
+        dash["totals"]["sources"] == sources_tile,
+        f"dashboard {dash['totals']['sources']}, list {sources_tile}",
     )
     rep.check(
         "8",

@@ -3,11 +3,12 @@
 # Data lives in ./.pgdata (git-ignored). Safe to re-run: it only initialises once.
 #
 # Usage:   scripts/dev-postgres.sh start|stop|status
-# Env:     ST_PG_PORT (default 5432), ST_PG_PASSWORD (required on first start)
+# Env:     ST_PG_PORT (default 5432), ST_PG_PASSWORD (required on first start),
+#          ST_PG_DATA (default ./.pgdata)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DATA="$ROOT/.pgdata"
+DATA="${ST_PG_DATA:-$ROOT/.pgdata}"
 PORT="${ST_PG_PORT:-5432}"
 DB_USER="sentineltrace"
 
@@ -31,8 +32,20 @@ as_pg() {
   fi
 }
 
+# When run as root the server runs as 'postgres', which must be able to reach $DATA.
+check_access() {
+  [[ $EUID -eq 0 ]] || return 0
+  local parent; parent="$(dirname "$DATA")"
+  if ! runuser -u postgres -- test -x "$parent"; then
+    echo "The 'postgres' user cannot reach $parent (a parent directory is private)." >&2
+    echo "Clone the project somewhere it can reach, or set ST_PG_DATA to such a directory." >&2
+    exit 1
+  fi
+}
+
 case "${1:-}" in
   start)
+    check_access
     if [[ ! -f "$DATA/PG_VERSION" ]]; then
       : "${ST_PG_PASSWORD:?Set ST_PG_PASSWORD for the first start}"
       mkdir -p "$DATA"; chmod 700 "$DATA"

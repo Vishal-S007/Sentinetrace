@@ -28,7 +28,7 @@ describe('App authentication flow', () => {
     await userEvent.type(screen.getByLabelText('Password'), 'a-long-password')
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
 
-    expect(await screen.findByRole('heading', { name: 'System status' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Settings & status' })).toBeInTheDocument()
     const loginCall = calls.find((c) => c.url === '/api/auth/login')!
     expect(loginCall.body).toEqual({ username: 'adminuser', password: 'a-long-password' })
   })
@@ -63,7 +63,7 @@ describe('App authentication flow', () => {
     renderWithAuth(<App />, '/admin/users')
     expect(await screen.findByText('Access denied')).toBeInTheDocument()
     const nav = screen.getByRole('navigation', { name: 'Main' })
-    expect(nav).toHaveTextContent('System status')
+    expect(nav).toHaveTextContent('Settings & status')
     expect(nav).not.toHaveTextContent('Users & roles')
     expect(nav).not.toHaveTextContent('Audit log')
   })
@@ -84,7 +84,7 @@ describe('App authentication flow', () => {
       ...healthy,
     })
     renderWithAuth(<App />, '/status')
-    await screen.findByRole('heading', { name: 'System status' })
+    await screen.findByRole('heading', { name: 'Settings & status' })
     await userEvent.click(screen.getAllByRole('button', { name: 'Sign out' })[0])
     expect(await screen.findByRole('button', { name: 'Sign in' })).toBeInTheDocument()
     const logoutCall = calls.find((c) => c.url === '/api/auth/logout')!
@@ -100,7 +100,7 @@ describe('App authentication flow', () => {
       ...healthy,
     })
     renderWithAuth(<App />, '/status')
-    await screen.findByRole('heading', { name: 'System status' })
+    await screen.findByRole('heading', { name: 'Settings & status' })
     expired = true
     await userEvent.click(screen.getByRole('link', { name: 'Users & roles' }))
     await waitFor(() => expect(screen.getByText(/Your session has ended/)).toBeInTheDocument())

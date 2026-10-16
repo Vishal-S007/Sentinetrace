@@ -296,3 +296,26 @@ def test_cli_preview_output(monkeypatch, capsys):
     assert cli.main(["purge", "--older-than-days", "90", "--execute"]) == 0
     assert "Removed" in capsys.readouterr().out
     assert calls == [("preview", 90), ("purge", 90)]
+
+
+def test_system_settings_and_health(logged_in, settings, tmp_path):
+    settings.storage_dir = tmp_path / "storage"
+    (settings.storage_dir / "files").mkdir(parents=True)
+    (settings.storage_dir / "files" / "a").write_bytes(b"12345")
+    settings.export_rate_per_minute = 7
+    c, _ = logged_in("admin")
+    body = c.get("/api/admin/system").json()
+    by_key = {s["key"]: s for s in body["settings"]}
+    assert by_key["export_rate_per_minute"]["value"] == 7
+    assert by_key["export_rate_per_minute"]["env"] == "ST_EXPORT_RATE_PER_MINUTE"
+    assert by_key["cookie_secure"]["value"] is False  # development default
+    # No secrets: neither the database URL nor its password appear anywhere.
+    raw = c.get("/api/admin/system").text
+    assert "database_url" not in by_key
+    password = settings.database_url.hosts()[0].get("password")
+    assert password and password not in raw
+    assert body["database"]["size_bytes"] > 0 and "events" in body["database"]["rows"]
+    assert body["storage"]["files"] == 1 and body["storage"]["bytes"] == 5
+    assert set(body["queue"]) >= {"jobs_queued", "runs_queued", "last_import_finished_at"}
+    analyst, _ = logged_in("analyst")
+    assert analyst.get("/api/admin/system").status_code == 403

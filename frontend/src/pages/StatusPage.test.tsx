@@ -1,8 +1,12 @@
-import { render, screen } from '@testing-library/react'
+import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
+import { makeMe, renderWithAuth } from '../test/utils'
 import { StatusPage } from './StatusPage'
+
+let role: 'viewer' | 'admin' = 'viewer'
+const render = (ui: React.ReactElement) => renderWithAuth(ui, '/status')
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -14,7 +18,7 @@ function jsonResponse(status: number, body: unknown): Response {
 function mockFetch(routes: Record<string, () => Response | Promise<Response>>) {
   return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
-    const handler = routes[url]
+    const handler = url === '/api/auth/me' ? () => jsonResponse(200, makeMe(role)) : routes[url]
     if (!handler) throw new Error(`Unmocked request: ${url}`)
     return handler()
   })
@@ -74,6 +78,49 @@ describe('StatusPage', () => {
     healthy = true
     await userEvent.click(screen.getByRole('button', { name: /re-check/i }))
     expect(await screen.findByText('Online')).toBeInTheDocument()
-    expect(spy).toHaveBeenCalledTimes(4)
+    expect(spy.mock.calls.filter(([u]) => u === '/api/health')).toHaveLength(2)
+  })
+})
+
+describe('StatusPage settings (admin)', () => {
+  it('shows effective settings and system health, without secrets', async () => {
+    role = 'admin'
+    mockFetch({
+      '/api/health': () => jsonResponse(200, { status: 'ok', version: '0.1.0' }),
+      '/api/ready': () => jsonResponse(200, { status: 'ready', database: 'ok' }),
+      '/api/admin/system': () =>
+        jsonResponse(200, {
+          settings: [
+            { group: 'Uploads and ingestion', key: 'max_upload_bytes', env: 'ST_MAX_UPLOAD_BYTES', value: 52428800, description: 'Largest accepted upload (bytes)' },
+            { group: 'Sessions and sign-in', key: 'cookie_secure', env: 'ST_COOKIE_SECURE', value: false, description: 'Cookies sent over HTTPS only' },
+            { group: 'Retention and limits', key: 'retention_auto_days', env: 'ST_RETENTION_AUTO_DAYS', value: null, description: 'Automatic purge' },
+          ],
+          database: { host: 'db:5432', name: 'sentineltrace', server_version: '16.4', size_bytes: 10485760, rows: { events: 6620, alerts: 13, audit_log: 40 } },
+          queue: { jobs_queued: 1, jobs_running: 0, jobs_failed: 2, runs_queued: 0, runs_running: 0, last_import_finished_at: null, last_detection_finished_at: null },
+          storage: { files: 3, bytes: 2048, free_bytes: 50, total_bytes: 100 },
+        }),
+    })
+    render(<StatusPage />)
+    const settings = await screen.findByRole('region', { name: 'Application settings' })
+    expect(settings).toHaveTextContent('Largest accepted upload (bytes)52,428,800ST_MAX_UPLOAD_BYTES')
+    expect(settings).toHaveTextContent('Cookies sent over HTTPS onlynoST_COOKIE_SECURE')
+    expect(settings).toHaveTextContent('Automatic purgenot set')
+    const health = screen.getByRole('region', { name: 'Database, queue and storage' })
+    expect(health).toHaveTextContent('sentineltrace on db:5432')
+    expect(health).toHaveTextContent('Database size10 MB')
+    expect(health).toHaveTextContent('6,620')
+    expect(health).toHaveTextContent('50 B (50% used)')
+    role = 'viewer'
+  })
+
+  it('is not shown to non-admins', async () => {
+    role = 'viewer'
+    mockFetch({
+      '/api/health': () => jsonResponse(200, { status: 'ok', version: '0.1.0' }),
+      '/api/ready': () => jsonResponse(200, { status: 'ready', database: 'ok' }),
+    })
+    render(<StatusPage />)
+    await screen.findByText('Online')
+    expect(screen.queryByRole('region', { name: 'Application settings' })).not.toBeInTheDocument()
   })
 })

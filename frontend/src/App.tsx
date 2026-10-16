@@ -34,7 +34,7 @@ const NAV: { to: string; label: string; permission?: string }[] = [
   { to: '/rules', label: 'Detection rules', permission: 'rules:read' },
   { to: '/sources', label: 'Log sources', permission: 'events:read' },
   { to: '/jobs', label: 'Ingestion jobs', permission: 'events:read' },
-  { to: '/status', label: 'System status' },
+  { to: '/status', label: 'Settings & status' },
   { to: '/admin/users', label: 'Users & roles', permission: 'users:manage' },
   { to: '/admin/audit', label: 'Audit log', permission: 'audit:read' },
   { to: '/admin/retention', label: 'Data retention', permission: 'settings:manage' },

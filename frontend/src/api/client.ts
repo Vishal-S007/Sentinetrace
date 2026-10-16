@@ -493,6 +493,21 @@ export interface RetentionCounts {
   auto_days: number | null
 }
 
+export interface SystemInfo {
+  settings: { group: string; key: string; env: string; value: unknown; description: string }[]
+  database: { host: string; name: string; server_version: string; size_bytes: number; rows: Record<string, number> }
+  queue: {
+    jobs_queued: number
+    jobs_running: number
+    jobs_failed: number
+    runs_queued: number
+    runs_running: number
+    last_import_finished_at: string | null
+    last_detection_finished_at: string | null
+  }
+  storage: { files: number; bytes: number; free_bytes: number; total_bytes: number }
+}
+
 // ---- Transport ----
 
 const UNSAFE = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
@@ -659,6 +674,7 @@ export const api = {
   exportUrl: (kind: 'alerts' | 'events' | 'audit', filters: Record<string, string | undefined>, format: 'csv' | 'json') =>
     `/api/${kind}/export${toQuery({ ...filters, format })}`,
 
+  system: () => request<SystemInfo>('/api/admin/system'),
   retentionPreview: (older_than_days: number) =>
     request<RetentionCounts>(`/api/admin/retention${toQuery({ older_than_days })}`),
   retentionPurge: (older_than_days: number) =>

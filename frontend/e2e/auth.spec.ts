@@ -37,8 +37,8 @@ test('admin manages users, sees the audit trail, and RBAC applies to the new use
   // Admin signs in (lands on the security overview) and checks live system status.
   await signIn(page, ADMIN_USER, ADMIN_PASSWORD)
   await expect(page.getByRole('heading', { name: 'Security overview' })).toBeVisible()
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'System status' }).click()
-  await expect(page.getByRole('heading', { name: 'System status' })).toBeVisible()
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Settings & status' }).click()
+  await expect(page.getByRole('heading', { name: 'Settings & status' })).toBeVisible()
   await expect(page.getByText('Online')).toBeVisible()
   await expect(page.getByText('Connected')).toBeVisible()
 

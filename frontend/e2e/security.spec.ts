@@ -41,7 +41,7 @@ test('every screen works under the production CSP', async ({ page }) => {
     ['/rules', 'Detection rules'],
     ['/sources', 'Log sources'],
     ['/jobs', 'Ingestion jobs'],
-    ['/status', 'System status'],
+    ['/status', 'Settings & status'],
     ['/admin/users', 'Users & roles'],
     ['/admin/audit', 'Audit log'],
     ['/admin/retention', 'Data retention'],

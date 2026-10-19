@@ -163,7 +163,7 @@ function Evidence({ alert }: { alert: AlertDetail }) {
             Showing {formatCount(rows.length)} of {formatCount(page.total_linked)} linked events
             {page.truncated && ` (the alert covers ${formatCount(page.total_events)} events; evidence links are capped)`}.
           </p>
-          <div className="overflow-x-auto rounded-md border border-line">
+          <div className="overflow-x-auto rounded-md border border-line" tabIndex={0} role="region" aria-label="Supporting log lines">
             <table className="w-full min-w-[800px] text-left text-sm">
               <thead className="bg-panel text-xs uppercase tracking-wide text-ink-dim">
                 <tr>

@@ -20,7 +20,7 @@ from app.db.session import get_sessionmaker
 from app.detection.runs import claim_next_run, process_run
 from app.ingestion.processor import claim_next_job, process_job, recover_stale_jobs
 from app.models import AppConfig
-from app.services import retention
+from app.services import privacy, retention
 
 logger = logging.getLogger("sentineltrace.worker")
 _stop = False
@@ -125,6 +125,13 @@ def _tick(db: Session, settings: Settings, state: _State) -> bool:
     if time.monotonic() - state.last_retention_check > RETENTION_CHECK_SECONDS:
         state.last_retention_check = time.monotonic()
         maybe_auto_purge(db, settings)
+        pruned = privacy.prune_sign_in_records(db, settings)
+        if pruned.login_attempts or pruned.sessions:
+            logger.info(
+                "Deleted %d old login attempt(s) and %d finished session(s)",
+                pruned.login_attempts,
+                pruned.sessions,
+            )
     return False
 
 

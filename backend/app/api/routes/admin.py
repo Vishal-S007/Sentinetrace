@@ -121,6 +121,17 @@ SETTING_GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
             ("export_rate_per_minute", "Exports and reports per user per minute"),
         ],
     ),
+    (
+        "Privacy and operator details",
+        [
+            ("login_attempt_retention_days", "Sign-in attempts are deleted after (days)"),
+            ("session_retention_days", "Finished sessions are deleted after (days)"),
+            ("operator_name", "Operator shown on the legal pages"),
+            ("operator_contact", "Privacy contact shown on the legal pages"),
+            ("operator_address", "Operator address shown on the legal pages"),
+            ("legal_effective_date", "Effective date of the legal pages"),
+        ],
+    ),
 ]
 
 

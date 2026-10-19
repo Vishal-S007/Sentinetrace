@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 
 import { ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
@@ -46,7 +46,7 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-full items-center justify-center p-4">
+    <div className="flex min-h-full flex-col items-center justify-center gap-4 p-4">
       <form onSubmit={onSubmit} className="w-full max-w-sm space-y-4 rounded-lg border border-line bg-panel p-6" noValidate>
         <div className="flex items-center gap-2">
           <span aria-hidden className="h-2.5 w-2.5 rounded-full bg-accent" />
@@ -85,6 +85,26 @@ export function LoginPage() {
           {submitting ? 'Signing in…' : 'Sign in'}
         </Button>
       </form>
+      <footer className="w-full max-w-sm space-y-2 text-xs text-ink-dim">
+        <p role="note">
+          SentinelTrace uses two strictly necessary cookies to keep you signed in and to block forged requests. There are
+          no tracking or advertising cookies, so there is nothing to accept.{' '}
+          <Link to="/legal/cookies" className="text-accent underline underline-offset-2">
+            Cookie policy
+          </Link>
+        </p>
+        <p>
+          By signing in you agree to the{' '}
+          <Link to="/legal/terms" className="text-accent underline underline-offset-2">
+            terms of service
+          </Link>
+          . Your data is handled as described in the{' '}
+          <Link to="/legal/privacy" className="text-accent underline underline-offset-2">
+            privacy policy
+          </Link>
+          .
+        </p>
+      </footer>
     </div>
   )
 }

@@ -1,5 +1,6 @@
 """Application settings, loaded from environment variables (never hardcoded secrets)."""
 
+from datetime import date
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -67,6 +68,16 @@ class Settings(BaseSettings):
     login_window_seconds: int = Field(default=900, gt=0)
     login_max_failures_per_user: int = Field(default=5, gt=0)
     login_max_failures_per_ip: int = Field(default=20, gt=0)
+
+    # Personal-data housekeeping: sign-in records are deleted once no longer needed
+    login_attempt_retention_days: int = Field(default=30, ge=1, le=3650)
+    session_retention_days: int = Field(default=7, ge=1, le=3650)
+
+    # Who runs this instance. Shown in the privacy policy, terms and cookie policy.
+    operator_name: str = Field(default="", max_length=200)
+    operator_contact: str = Field(default="", max_length=200)
+    operator_address: str = Field(default="", max_length=500)
+    legal_effective_date: date = date(2026, 10, 19)
 
     @field_validator("database_url")
     @classmethod

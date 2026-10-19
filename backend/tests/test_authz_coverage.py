@@ -12,6 +12,7 @@ PUBLIC = {
     ("GET", "/api/health"),
     ("GET", "/api/ready"),
     ("POST", "/api/auth/login"),
+    ("GET", "/api/legal"),
 }
 UNSAFE = {"POST", "PUT", "PATCH", "DELETE"}
 

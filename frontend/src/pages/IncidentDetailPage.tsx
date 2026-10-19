@@ -268,7 +268,7 @@ export function IncidentDetailPage() {
             {incident.alerts.length === 0 ? (
               <p className="text-sm text-ink-dim">No alerts linked.</p>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Linked alert list">
                 <table className="w-full min-w-[560px] text-left text-sm">
                   <thead className="text-xs uppercase tracking-wide text-ink-dim">
                     <tr>

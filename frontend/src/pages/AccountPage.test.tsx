@@ -42,3 +42,27 @@ describe('AccountPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Current password is incorrect')
   })
 })
+
+describe('AccountPage: your data', () => {
+  it('sends a deletion request after confirmation', async () => {
+    const { calls } = mockApi({
+      'GET /api/auth/me': () => json(200, makeMe('viewer')),
+      'POST /api/auth/deletion-request': () => json(200, { requested_at: '2026-10-19T08:00:00Z' }),
+    })
+    renderWithAuth(<AccountPage />)
+    await userEvent.click(await screen.findByRole('button', { name: 'Request deletion of my data' }))
+    expect(calls.some((c) => c.url === '/api/auth/deletion-request')).toBe(false)
+    await userEvent.click(screen.getByRole('button', { name: 'Send deletion request' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('You asked for your data to be deleted')
+    expect(calls.filter((c) => c.url === '/api/auth/deletion-request')).toHaveLength(1)
+  })
+
+  it('shows a pending request instead of the button', async () => {
+    const me = makeMe('viewer')
+    me.user.deletion_requested_at = '2026-10-18T08:00:00Z'
+    mockApi({ 'GET /api/auth/me': () => json(200, me) })
+    renderWithAuth(<AccountPage />)
+    expect(await screen.findByRole('status')).toHaveTextContent('An administrator will erase your account')
+    expect(screen.queryByRole('button', { name: 'Request deletion of my data' })).not.toBeInTheDocument()
+  })
+})

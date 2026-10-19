@@ -18,6 +18,8 @@ import {
 type LoadState = { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'loaded'; users: User[]; roles: Role[] }
 
 const ROLES: RoleName[] = ['viewer', 'analyst', 'admin']
+/** Erased accounts are renamed to this prefix plus their id (set by the server). */
+const ERASED_PREFIX = 'erased-user-'
 
 function errorMessage(err: unknown): string {
   return err instanceof ApiError ? err.message : 'Unexpected error'
@@ -96,6 +98,24 @@ function UserRow({ user, isSelf, onChanged, onError }: {
   onError: (msg: string) => void
 }) {
   const [busy, setBusy] = useState(false)
+  const [erasing, setErasing] = useState(false)
+  const [confirmName, setConfirmName] = useState('')
+  const erased = user.username.startsWith(ERASED_PREFIX)
+
+  async function erase(e: FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      const old = user.username
+      onChanged(await api.eraseUser(user.id, confirmName), `Personal data of ${old} erased. The account is now ${ERASED_PREFIX}${user.id}.`)
+      setErasing(false)
+      setConfirmName('')
+    } catch (err) {
+      onError(errorMessage(err))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function update(body: Parameters<typeof api.updateUser>[1], msg: string) {
     setBusy(true)
@@ -109,17 +129,23 @@ function UserRow({ user, isSelf, onChanged, onError }: {
   }
 
   return (
+    <>
     <tr className="border-t border-line">
       <td className="px-3 py-2 font-mono text-sm">
         {user.username}
         {isSelf && <span className="ml-2 text-xs text-ink-dim">(you)</span>}
+        {user.deletion_requested_at && (
+          <span className="mt-1 block font-sans text-xs text-warn">
+            Deletion requested {formatDateTime(user.deletion_requested_at)}
+          </span>
+        )}
       </td>
       <td className="px-3 py-2 text-sm text-ink-dim">{user.email ?? '—'}</td>
       <td className="px-3 py-2">
         <Select
           aria-label={`Role for ${user.username}`}
           value={user.role}
-          disabled={busy || isSelf}
+          disabled={busy || isSelf || erased}
           onChange={(e) => void update({ role: e.target.value as RoleName }, `Role of ${user.username} changed to ${e.target.value}.`)}
         >
           {ROLES.map((r) => (
@@ -130,11 +156,16 @@ function UserRow({ user, isSelf, onChanged, onError }: {
         </Select>
       </td>
       <td className="px-3 py-2 text-sm">
-        <span className={user.is_active ? 'text-ok' : 'text-ink-dim'}>{user.is_active ? 'Active' : 'Disabled'}</span>
+        <span className={user.is_active ? 'text-ok' : 'text-ink-dim'}>{erased ? 'Erased' : user.is_active ? 'Active' : 'Disabled'}</span>
       </td>
       <td className="px-3 py-2 text-sm text-ink-dim">{formatDateTime(user.last_login_at)}</td>
-      <td className="px-3 py-2 text-right">
-        {!isSelf && (
+      <td className="space-x-2 whitespace-nowrap px-3 py-2 text-right">
+        {!isSelf && !erased && (
+          <Button variant="secondary" disabled={busy} aria-expanded={erasing} onClick={() => setErasing((v) => !v)}>
+            Erase data
+          </Button>
+        )}
+        {!isSelf && !erased && (
           <Button
             variant={user.is_active ? 'danger' : 'secondary'}
             disabled={busy}
@@ -150,6 +181,35 @@ function UserRow({ user, isSelf, onChanged, onError }: {
         )}
       </td>
     </tr>
+    {erasing && (
+      <tr className="bg-panel">
+        <td colSpan={6} className="px-3 py-3">
+          <form onSubmit={erase} aria-label={`Erase personal data of ${user.username}`} className="flex flex-wrap items-end gap-3 text-sm">
+            <p className="w-full text-ink-dim">
+              Erasing replaces the username and removes the email, disables the account, and deletes its sessions and
+              sign-in records. Alerts, notes and incidents keep pointing at the anonymised account. Past audit log entries
+              are kept. This cannot be undone.
+            </p>
+            <Field label={`Type ${user.username} to confirm`}>
+              <TextInput value={confirmName} onChange={(e) => setConfirmName(e.target.value)} autoComplete="off" />
+            </Field>
+            <Button type="submit" variant="danger" disabled={busy || confirmName.trim().toLowerCase() !== user.username.toLowerCase()}>
+              Erase personal data
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setErasing(false)
+                setConfirmName('')
+              }}
+            >
+              Cancel
+            </Button>
+          </form>
+        </td>
+      </tr>
+    )}
+    </>
   )
 }
 
@@ -190,7 +250,7 @@ export function UsersPage() {
           {state.users.length === 0 ? (
             <Empty>No users yet.</Empty>
           ) : (
-            <div className="overflow-x-auto rounded-md border border-line">
+            <div className="overflow-x-auto rounded-md border border-line" tabIndex={0} role="region" aria-label="Users table">
               <table className="w-full min-w-[720px] text-left">
                 <thead className="bg-panel text-xs uppercase tracking-wide text-ink-dim">
                   <tr>

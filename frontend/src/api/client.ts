@@ -32,6 +32,22 @@ export interface User {
   is_active: boolean
   created_at: string
   last_login_at: string | null
+  /** Set while the user's request to delete their data waits for an admin. */
+  deletion_requested_at?: string | null
+}
+
+export interface LegalFacts {
+  operator: { name: string; contact: string; address: string }
+  effective_date: string
+  retention: {
+    login_attempt_days: number
+    session_retention_days: number
+    session_idle_minutes: number
+    session_absolute_hours: number
+    data_retention_days: number | null
+    data_retention_min_days: number
+  }
+  cookies: { name: string; purpose: string; duration_hours: number; http_only: boolean; same_site: string }[]
 }
 
 export interface Me {
@@ -612,6 +628,10 @@ export const api = {
   users: () => request<User[]>('/api/users'),
   createUser: (body: UserCreate) => request<User>('/api/users', { method: 'POST', body }),
   updateUser: (id: number, body: UserUpdate) => request<User>(`/api/users/${id}`, { method: 'PATCH', body }),
+  eraseUser: (id: number, confirm_username: string) =>
+    request<User>(`/api/users/${id}/erase`, { method: 'POST', body: { confirm_username } }),
+  requestDeletion: () => request<{ requested_at: string }>('/api/auth/deletion-request', { method: 'POST' }),
+  legal: () => request<LegalFacts>('/api/legal'),
 
   formats: () => request<LogFormat[]>('/api/formats'),
   sources: () => request<LogSource[]>('/api/sources'),

@@ -24,6 +24,7 @@ Uploads live in the `storage` volume, shared by the backend and the worker.
    - No other secrets are needed: session tokens are random and stored only as SHA-256 hashes.
 6. **API docs.** `/api/docs` and `/api/openapi.json` require no login; they describe the API but expose no data. Block them at the proxy if you do not want the API shape public.
 7. **First admin.** Create it with `docker compose exec backend python -m app.cli create-admin --username <name>` and a strong password (12+ characters). Give everyone else the lowest role they need (viewer, analyst).
+8. **Legal pages and operator details.** Set `ST_OPERATOR_NAME`, `ST_OPERATOR_CONTACT` and `ST_OPERATOR_ADDRESS` so the privacy policy, terms and cookie policy name who runs the instance. Have the texts reviewed for your jurisdiction. See [COMPLIANCE.md](COMPLIANCE.md) for the full checklist.
 
 ## Database
 
@@ -76,4 +77,4 @@ All settings are environment variables prefixed `ST_` (see `.env.example`), and 
 - **No live log streaming.** Logs are imported as files, and detection runs after each import.
 - **Detection is rule-based** and tuned on synthetic data. Thresholds need adjusting for real traffic; expect false positives and misses.
 - **One API process** by default. The per-user export limit and login limits are database-backed, so more API processes would still share them, but this has not been load-tested.
-- **The audit log is never purged.** Archive it externally if it grows too large.
+- **The audit log is never purged.** Archive it externally if it grows too large. It keeps usernames as they were at the time, even after an account is erased.

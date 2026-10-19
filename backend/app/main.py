@@ -21,6 +21,7 @@ from app.api.routes import (
     health,
     incidents,
     jobs,
+    legal,
     sources,
     users,
 )
@@ -140,6 +141,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     app.include_router(health.router, prefix="/api")
+    app.include_router(legal.router, prefix="/api")
     app.include_router(auth.router, prefix="/api")
     app.include_router(users.router, prefix="/api")
     # Exports first: their paths (/alerts/export, ...) must win over /alerts/{alert_id}.

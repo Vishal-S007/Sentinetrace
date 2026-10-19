@@ -17,7 +17,7 @@ A log analysis and threat detection platform. It imports web-server, application
   - 10 deterministic, versioned rules: authentication failures, brute force, SQL injection, XSS, path traversal, request bursts, 401/403 floods, 404 reconnaissance, suspicious methods, multi-stage correlation
   - alerts are grouped per entity and hour, linked to the original log lines, and explained with a confidence level and next steps
 - **Investigation:**
-  - live dashboard with drill-downs, a server-side event explorer, and an alert queue with owners and notes
+  - a dashboard computed from the stored events and alerts, with drill-downs, a server-side event explorer, and an alert queue with owners and notes
   - incidents with a merged timeline, and Markdown/JSON incident reports
 - **Reporting:** CSV/JSON exports of alerts, events and the audit log, with the same filters as the screens.
 - **Administration:**
@@ -30,7 +30,7 @@ A log analysis and threat detection platform. It imports web-server, application
   - server-side sessions in HttpOnly cookies, CSRF protection, Argon2id passwords and login rate limiting
   - strict Content-Security-Policy, and authorization checks on every endpoint (enforced by a test)
 - **Quality:**
-  - 379 backend tests (96% line coverage), 87 frontend tests and 7 Playwright journeys
+  - 392 backend tests (96% line coverage), 94 frontend tests and 10 Playwright tests, including WCAG 2.1 AA accessibility checks
   - an evaluation against ground truth, with no missed alerts, no wrong alerts, and zero alerts on 24 hours of benign traffic
   - an [automated acceptance check](#acceptance-check)
 
@@ -308,6 +308,22 @@ docker compose exec backend python -m app.cli purge --older-than-days 90 --execu
 - **Failure handling:** a database outage returns `503` with `Retry-After`; a full disk on upload returns `507`; neither exposes internal details.
 - API errors never include stack traces or exception text. A request ID is returned for correlation.
 - This is a **defensive** analysis tool for synthetic or authorized logs only.
+
+## Privacy, legal pages and accessibility
+
+- **Legal pages:** `/legal/privacy`, `/legal/terms` and `/legal/cookies` are public and linked from the sign-in page and the sidebar. Retention periods and cookie details are filled in from the running configuration. Set the operator's details first:
+  ```bash
+  ST_OPERATOR_NAME="Example Security Team"
+  ST_OPERATOR_CONTACT=privacy@example.com
+  ST_OPERATOR_ADDRESS="1 Example Road, Example City"
+  ```
+- **Cookies:** only two strictly necessary cookies (session and CSRF). There is no tracking, analytics or third-party content, so the sign-in page shows a notice rather than a consent banner.
+- **Data minimisation:** the worker deletes login attempts after 30 days and ended sessions after 7 days (`ST_LOGIN_ATTEMPT_RETENTION_DAYS`, `ST_SESSION_RETENTION_DAYS`).
+- **Deletion requests:** users choose *Request deletion of my data* on **My account**. Admins see the request on **Users & roles** and use *Erase data*, which anonymizes and disables the account and deletes its sessions and sign-in records. The append-only audit log is kept.
+- **Accessibility:** WCAG 2.1 AA checks with axe-core on every screen, a keyboard-only test, a skip link, visible focus rings and table alternatives for charts (`frontend/e2e/accessibility.spec.ts`).
+- **Third-party licences:** [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+The full 20-point review is in [docs/COMPLIANCE.md](docs/COMPLIANCE.md). The legal texts are a starting point; have them reviewed for your jurisdiction.
 
 ## Troubleshooting
 

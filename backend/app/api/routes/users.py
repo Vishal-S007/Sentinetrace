@@ -9,8 +9,8 @@ from app.api.deps import AuthContext, DbSession, require
 from app.core.permissions import Permission, permissions_for
 from app.core.security import hash_password
 from app.models import Role, User
-from app.schemas.auth import RoleOut, UserCreate, UserOut, UserUpdate
-from app.services import audit
+from app.schemas.auth import EraseRequest, RoleOut, UserCreate, UserOut, UserUpdate
+from app.services import audit, privacy
 from app.services.auth import find_user, revoke_user_sessions, utcnow
 
 router = APIRouter(tags=["users"])
@@ -38,13 +38,20 @@ def list_roles(_: Admin, db: DbSession) -> list[RoleOut]:
 
 
 @router.get("/users", response_model=list[UserOut])
-def list_users(_: Admin, db: DbSession) -> list[User]:
+def list_users(_: Admin, db: DbSession) -> list[UserOut]:
     # Bounded: user counts are small; capped defensively.
-    return list(db.scalars(select(User).order_by(User.username).limit(1000)).all())
+    users = db.scalars(select(User).order_by(User.username).limit(1000)).all()
+    pending = privacy.pending_deletion_requests(db)
+    return [
+        UserOut.model_validate(u).model_copy(update={"deletion_requested_at": pending.get(u.id)})
+        for u in users
+    ]
 
 
 @router.post("/users", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def create_user(body: UserCreate, auth: Admin, request: Request, db: DbSession) -> User:
+    if body.username.lower().startswith(privacy.ERASED_PREFIX):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "This username prefix is reserved")
     if find_user(db, body.username) is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Username already exists")
     user = User(
@@ -76,6 +83,8 @@ def update_user(
     user = db.get(User, user_id)
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    if privacy.is_erased(user):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Erased accounts cannot be changed")
 
     changes = body.model_dump(exclude_unset=True)
     is_self = user.id == auth.user.id
@@ -119,4 +128,27 @@ def update_user(
     )
     db.commit()
     db.refresh(user)
+    return user
+
+
+@router.post("/users/{user_id}/erase", response_model=UserOut)
+def erase_user(
+    user_id: int, body: EraseRequest, auth: Admin, request: Request, db: DbSession
+) -> User:
+    """Erase a user's personal data (a data deletion request).
+
+    The account is anonymized and disabled, and its sessions and login attempts are
+    deleted. Alerts, notes and incidents keep pointing at the anonymized account. The
+    append-only audit log is kept for accountability.
+    """
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    if user.id == auth.user.id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "You cannot erase your own account")
+    if privacy.is_erased(user):
+        raise HTTPException(status.HTTP_409_CONFLICT, "This account has already been erased")
+    if body.confirm_username.strip().lower() != user.username.lower():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "The username does not match")
+    privacy.erase_user(db, user, auth.user, request)
     return user

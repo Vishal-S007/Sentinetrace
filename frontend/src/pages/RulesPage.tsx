@@ -84,7 +84,7 @@ export function RulesPage() {
       {error && <ErrorBanner message={`Could not load rules: ${error}`} />}
       {!rules && !error && <Loading label="Loading rules…" />}
       {rules && (
-        <div className="overflow-x-auto rounded-md border border-line">
+        <div className="overflow-x-auto rounded-md border border-line" tabIndex={0} role="region" aria-label="Rules table">
           <table className="w-full min-w-[860px] text-left text-sm">
             <thead className="bg-panel text-xs uppercase tracking-wide text-ink-dim">
               <tr>

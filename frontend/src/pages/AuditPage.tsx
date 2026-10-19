@@ -126,7 +126,7 @@ export function AuditPage() {
       {status === 'loaded' && items.length === 0 && <Empty>No audit entries match these filters.</Empty>}
       {status === 'loaded' && items.length > 0 && (
         <>
-          <div className="overflow-x-auto rounded-md border border-line">
+          <div className="overflow-x-auto rounded-md border border-line" tabIndex={0} role="region" aria-label="Audit entries table">
             <table className="w-full min-w-[800px] text-left text-sm">
               <thead className="bg-panel text-xs uppercase tracking-wide text-ink-dim">
                 <tr>

@@ -17,6 +17,7 @@ import { RulesPage } from './pages/RulesPage'
 import { AuditPage } from './pages/AuditPage'
 import { JobDetailPage } from './pages/JobDetailPage'
 import { JobsPage } from './pages/JobsPage'
+import { LegalLinks, LegalPage } from './pages/LegalPage'
 import { LoginPage } from './pages/LoginPage'
 import { SourcesPage } from './pages/SourcesPage'
 import { StatusPage } from './pages/StatusPage'
@@ -60,6 +61,9 @@ function Shell() {
 
   return (
     <div className="flex h-full flex-col md:flex-row">
+      <a href="#main" className="skip-link">
+        Skip to main content
+      </a>
       <aside className="flex shrink-0 flex-col border-b border-line bg-panel md:w-56 md:border-b-0 md:border-r">
         <div className="flex items-center gap-2 px-4 py-4">
           <span aria-hidden className="h-2 w-2 rounded-full bg-accent" />
@@ -98,8 +102,9 @@ function Shell() {
             Sign out
           </button>
         </div>
+        <LegalLinks className="hidden px-4 pb-4 md:flex" />
       </aside>
-      <main className="flex-1 overflow-y-auto p-4 md:p-8">
+      <main id="main" tabIndex={-1} className="flex-1 overflow-y-auto p-4 focus:outline-none md:p-8">
         <Routes>
           <Route path="/" element={<Navigate to={can('events:read') ? '/dashboard' : '/status'} replace />} />
           <Route
@@ -237,6 +242,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/legal/:slug" element={<LegalPage />} />
       <Route
         path="/*"
         element={

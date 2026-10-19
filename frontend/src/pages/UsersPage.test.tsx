@@ -106,3 +106,36 @@ describe('UsersPage', () => {
     expect(calls.filter((c) => c.method === 'PATCH').map((c) => c.body)).toEqual([{ is_active: false }, { role: 'analyst' }])
   })
 })
+
+describe('UsersPage: erasure', () => {
+  it('shows a pending deletion request and erases after typing the username', async () => {
+    const csrf = setCsrfCookie()
+    const requested = { ...other, deletion_requested_at: '2026-10-18T08:00:00Z' }
+    const { calls } = mockApi({
+      'GET /api/auth/me': () => json(200, me),
+      'GET /api/users': () => json(200, [me.user, requested]),
+      'GET /api/roles': () => json(200, roles),
+      'POST /api/users/2/erase': () =>
+        json(200, { ...other, username: 'erased-user-2', email: null, is_active: false, deletion_requested_at: null }),
+    })
+    renderWithAuth(<UsersPage />)
+    const row = (await screen.findByText('bob')).closest('tr')!
+    expect(within(row).getByText(/Deletion requested/)).toBeInTheDocument()
+
+    await userEvent.click(within(row).getByRole('button', { name: 'Erase data' }))
+    const form = screen.getByRole('form', { name: 'Erase personal data of bob' })
+    const submit = within(form).getByRole('button', { name: 'Erase personal data' })
+    expect(submit).toBeDisabled()
+    await userEvent.type(within(form).getByLabelText('Type bob to confirm'), 'bob')
+    await userEvent.click(submit)
+
+    expect(await screen.findByText(/Personal data of bob erased/)).toBeInTheDocument()
+    const erase = calls.find((c) => c.url === '/api/users/2/erase')!
+    expect(erase.body).toEqual({ confirm_username: 'bob' })
+    expect(erase.headers['X-CSRF-Token']).toBe(csrf)
+    const erasedRow = screen.getByText('erased-user-2').closest('tr')!
+    expect(within(erasedRow).getByText('Erased')).toBeInTheDocument()
+    expect(within(erasedRow).queryByRole('button', { name: 'Erase data' })).not.toBeInTheDocument()
+    expect(within(erasedRow).getByRole('combobox')).toBeDisabled()
+  })
+})

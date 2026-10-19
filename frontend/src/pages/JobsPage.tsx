@@ -134,7 +134,7 @@ export function JobsPage() {
       )}
       {phase === 'loaded' && items.length > 0 && (
         <>
-          <div className="overflow-x-auto rounded-md border border-line">
+          <div className="overflow-x-auto rounded-md border border-line" tabIndex={0} role="region" aria-label="Jobs table">
             <table className="w-full min-w-[900px] text-left text-sm">
               <thead className="bg-panel text-xs uppercase tracking-wide text-ink-dim">
                 <tr>

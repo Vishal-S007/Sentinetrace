@@ -74,7 +74,7 @@ function ErrorsSection({ job }: { job: Job }) {
           Download CSV
         </a>
       </div>
-      <div className="overflow-x-auto rounded-md border border-line">
+      <div className="overflow-x-auto rounded-md border border-line" tabIndex={0} role="region" aria-label="Rejected lines table">
         <table className="w-full min-w-[700px] text-left text-sm">
           <thead className="bg-panel text-xs uppercase tracking-wide text-ink-dim">
             <tr>

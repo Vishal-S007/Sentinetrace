@@ -6,8 +6,14 @@ from app.api.deps import CSRF_COOKIE, SESSION_COOKIE, AppSettings, Auth, DbSessi
 from app.core.config import Settings
 from app.core.permissions import permissions_for
 from app.core.security import hash_password, verify_password
-from app.schemas.auth import LoginRequest, MeOut, PasswordChangeRequest, UserOut
-from app.services import audit
+from app.schemas.auth import (
+    DeletionRequestOut,
+    LoginRequest,
+    MeOut,
+    PasswordChangeRequest,
+    UserOut,
+)
+from app.services import audit, privacy
 from app.services.auth import (
     authenticate,
     check_login_rate_limit,
@@ -118,8 +124,16 @@ def logout(auth: Auth, request: Request, db: DbSession, settings: AppSettings) -
 
 
 @router.get("/me", response_model=MeOut)
-def me(auth: Auth) -> MeOut:
-    return _me(auth.user, auth.permissions)
+def me(auth: Auth, db: DbSession) -> MeOut:
+    out = _me(auth.user, auth.permissions)
+    out.user.deletion_requested_at = privacy.pending_deletion_requests(db).get(auth.user.id)
+    return out
+
+
+@router.post("/deletion-request", response_model=DeletionRequestOut)
+def request_deletion(auth: Auth, request: Request, db: DbSession) -> DeletionRequestOut:
+    """Ask an administrator to erase your account data. Recorded in the audit log."""
+    return DeletionRequestOut(requested_at=privacy.request_deletion(db, auth.user, request))
 
 
 @router.post("/password", status_code=status.HTTP_204_NO_CONTENT)

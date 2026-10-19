@@ -153,12 +153,22 @@ function DashboardBody({ data }: { data: Dashboard }) {
                 <summary className="cursor-pointer">View as table</summary>
                 <table className="mt-2 w-full">
                   <tbody>
-                    {data.events_over_time.filter((p) => p.count > 0).map((p) => (
-                      <tr key={p.bucket_start}>
-                        <td className="py-0.5">{tickLabel(p.bucket_start, bucket)}</td>
-                        <td className="text-right tabular-nums">{formatCount(p.count)}</td>
-                      </tr>
-                    ))}
+                    {data.events_over_time.filter((p) => p.count > 0).map((p) => {
+                      const r = bucketRange(p.bucket_start, bucket)
+                      return (
+                        <tr key={p.bucket_start}>
+                          <td className="py-0.5">{tickLabel(p.bucket_start, bucket)}</td>
+                          <td className="text-right tabular-nums">
+                            <Link
+                              className="text-accent hover:underline"
+                              to={`/events?since=${encodeURIComponent(r.since)}&until=${encodeURIComponent(r.until)}`}
+                            >
+                              {formatCount(p.count)}
+                            </Link>
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </details>
@@ -199,6 +209,49 @@ function DashboardBody({ data }: { data: Dashboard }) {
                 </BarChart>
               </ResponsiveContainer>
             </div>
+          )}
+          {anyAlertsOverTime && (
+            <details className="mt-2 text-xs text-ink-dim">
+              <summary className="cursor-pointer">View as table</summary>
+              <table className="mt-2 w-full">
+                <thead>
+                  <tr>
+                    <th className="py-0.5 text-left font-normal">Period</th>
+                    {SEVERITIES.map((s) => (
+                      <th key={s} className="text-right font-normal">
+                        {SEVERITY_LABEL[s]}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.alerts_over_time
+                    .filter((p) => SEVERITIES.some((s) => p[s] > 0))
+                    .map((p) => {
+                      const r = bucketRange(p.bucket_start, bucket)
+                      return (
+                        <tr key={p.bucket_start}>
+                          <td className="py-0.5">{tickLabel(p.bucket_start, bucket)}</td>
+                          {SEVERITIES.map((s) => (
+                            <td key={s} className="text-right tabular-nums">
+                              {p[s] > 0 ? (
+                                <Link
+                                  className="text-accent hover:underline"
+                                  to={`/alerts?severity=${s}&since=${encodeURIComponent(r.since)}&until=${encodeURIComponent(r.until)}`}
+                                >
+                                  {formatCount(p[s])}
+                                </Link>
+                              ) : (
+                                '0'
+                              )}
+                            </td>
+                          ))}
+                        </tr>
+                      )
+                    })}
+                </tbody>
+              </table>
+            </details>
           )}
         </Card>
 

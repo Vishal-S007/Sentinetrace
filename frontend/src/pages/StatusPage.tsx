@@ -96,7 +96,7 @@ function AdminSystem() {
           Effective values. They are set with environment variables (see <code className="font-mono">.env.example</code>) and apply after a restart.
           Detection thresholds are changed under Detection rules, and retention under Data retention. Secrets are never shown.
         </p>
-        <div className="overflow-x-auto rounded-md border border-line">
+        <div className="overflow-x-auto rounded-md border border-line" tabIndex={0} role="region" aria-label="Settings table">
           <table className="w-full min-w-[640px] text-left text-sm">
             <tbody>
               {groups.map((g) => (
@@ -199,9 +199,10 @@ export function StatusPage() {
             <dt className="text-xs uppercase tracking-wide text-ink-dim">Version</dt>
             <dd className="mt-2 font-mono text-sm">{state.health.version}</dd>
           </div>
-          <p className="col-span-full bg-panel px-4 py-2 text-xs text-ink-dim">
-            Last checked {state.checkedAt.toLocaleTimeString()}
-          </p>
+          <div className="col-span-full flex gap-1 bg-panel px-4 py-2 text-xs text-ink-dim">
+            <dt>Last checked</dt>
+            <dd>{state.checkedAt.toLocaleTimeString()}</dd>
+          </div>
         </dl>
       )}
       {can('settings:manage') && <AdminSystem />}

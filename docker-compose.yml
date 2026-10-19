@@ -30,6 +30,15 @@ services:
       ST_MAX_UPLOAD_BYTES: ${ST_MAX_UPLOAD_BYTES:-52428800}
       ST_EXPORT_RATE_PER_MINUTE: ${ST_EXPORT_RATE_PER_MINUTE:-}
       ST_RETENTION_MIN_DAYS: ${ST_RETENTION_MIN_DAYS:-}
+      # Shown on the privacy policy, so the backend needs the same values as the worker.
+      ST_RETENTION_AUTO_DAYS: ${ST_RETENTION_AUTO_DAYS:-}
+      ST_LOGIN_ATTEMPT_RETENTION_DAYS: ${ST_LOGIN_ATTEMPT_RETENTION_DAYS:-}
+      ST_SESSION_RETENTION_DAYS: ${ST_SESSION_RETENTION_DAYS:-}
+      # Who runs this instance: shown on the privacy policy, terms and cookie policy.
+      ST_OPERATOR_NAME: ${ST_OPERATOR_NAME:-}
+      ST_OPERATOR_CONTACT: ${ST_OPERATOR_CONTACT:-}
+      ST_OPERATOR_ADDRESS: ${ST_OPERATOR_ADDRESS:-}
+      ST_LEGAL_EFFECTIVE_DATE: ${ST_LEGAL_EFFECTIVE_DATE:-}
       # Set to true when the app is served over HTTPS (required in production).
       ST_COOKIE_SECURE: ${ST_COOKIE_SECURE:-false}
       # The backend is reachable only from the nginx container on the internal network,
@@ -52,6 +61,9 @@ services:
       # Optional: purge data older than N days once a day (see README "Data retention").
       ST_RETENTION_AUTO_DAYS: ${ST_RETENTION_AUTO_DAYS:-}
       ST_RETENTION_MIN_DAYS: ${ST_RETENTION_MIN_DAYS:-}
+      # The worker deletes old sign-in records hourly using these periods.
+      ST_LOGIN_ATTEMPT_RETENTION_DAYS: ${ST_LOGIN_ATTEMPT_RETENTION_DAYS:-}
+      ST_SESSION_RETENTION_DAYS: ${ST_SESSION_RETENTION_DAYS:-}
     volumes:
       - storage:/app/storage
     depends_on:

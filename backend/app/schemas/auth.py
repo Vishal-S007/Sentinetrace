@@ -35,6 +35,8 @@ class UserOut(BaseModel):
     is_active: bool
     created_at: datetime
     last_login_at: datetime | None
+    # Set when the user asked for their data to be deleted and no admin has erased it yet.
+    deletion_requested_at: datetime | None = None
 
     @field_validator("role", mode="before")
     @classmethod
@@ -110,3 +112,13 @@ class AuditPage(BaseModel):
     next_before_id: int | None = Field(
         description="Pass as before_id to fetch the next (older) page; null when no more."
     )
+
+
+class EraseRequest(BaseModel):
+    """The admin retypes the username, so the wrong account is not erased by a misclick."""
+
+    confirm_username: str = Field(min_length=1, max_length=64)
+
+
+class DeletionRequestOut(BaseModel):
+    requested_at: datetime

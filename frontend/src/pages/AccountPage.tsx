@@ -1,8 +1,65 @@
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 
 import { api, ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { Button, ErrorBanner, Field, PageHeader, SuccessBanner, TextInput } from '../components/ui'
+import { formatDateTime } from '../lib/format'
+
+function YourData({ requestedAt }: { requestedAt: string | null }) {
+  const [pending, setPending] = useState<string | null>(requestedAt)
+  const [confirming, setConfirming] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function submit() {
+    setBusy(true)
+    setError(null)
+    try {
+      setPending((await api.requestDeletion()).requested_at)
+      setConfirming(false)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Unexpected error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section aria-label="Your data" className="mt-8 space-y-3 rounded-md border border-line bg-panel p-4 text-sm">
+      <h2 className="font-semibold">Your data</h2>
+      <p className="text-ink-dim">
+        SentinelTrace keeps your account details, sign-in records and an audit trail of your actions. The{' '}
+        <Link to="/legal/privacy" className="text-accent underline underline-offset-2">
+          privacy policy
+        </Link>{' '}
+        explains what is kept, for how long, and your rights.
+      </p>
+      {error && <ErrorBanner message={error} />}
+      {pending ? (
+        <p role="status" className="rounded-md border border-warn/40 bg-warn/10 p-3 text-warn">
+          You asked for your data to be deleted on {formatDateTime(pending)}. An administrator will erase your account.
+          You can keep using it until then.
+        </p>
+      ) : confirming ? (
+        <div className="space-y-3 rounded-md border border-line p-3">
+          <p>
+            An administrator will erase your account. Your username and email will be removed, you will be signed out for
+            good, and your sign-in records will be deleted. Past audit log entries are kept as a security record.
+          </p>
+          <div className="flex gap-2">
+            <Button variant="danger" disabled={busy} onClick={() => void submit()}>
+              {busy ? 'Sending…' : 'Send deletion request'}
+            </Button>
+            <Button onClick={() => setConfirming(false)}>Cancel</Button>
+          </div>
+        </div>
+      ) : (
+        <Button onClick={() => setConfirming(true)}>Request deletion of my data</Button>
+      )}
+    </section>
+  )
+}
 
 export function AccountPage() {
   const { state } = useAuth()
@@ -68,6 +125,7 @@ export function AccountPage() {
           {busy ? 'Saving…' : 'Change password'}
         </Button>
       </form>
+      <YourData requestedAt={user.deletion_requested_at ?? null} />
     </section>
   )
 }

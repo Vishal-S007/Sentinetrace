@@ -1,6 +1,7 @@
 # SentinelTrace
 
 A log analysis and threat detection platform. It imports web-server, application and authentication logs, normalizes them into one event schema, runs deterministic detection rules, and presents evidence-backed alerts for investigation, incident handling and reporting.
+You can access the complete project through this repo.
 
 > **Status:** all eight development phases complete ([acceptance report](docs/reports/phase-8.md)). This is a **local MVP for synthetic or authorized logs**, not a production security product. Detection quality is measured only on the bundled synthetic datasets.
 
